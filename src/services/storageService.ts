@@ -180,18 +180,31 @@ export const storageService = {
   async fetchSwineRecords(params?: { barangay?: string; search?: string; status?: string; readyToSell?: boolean; isArchived?: boolean; page?: number; perPage?: number }): Promise<{ records: SwineRecord[]; total: number }> {
     if (this.isEffectiveOffline()) {
       let records = this.getSwineRecords();
+
       if (params?.barangay && params.barangay !== 'all') {
-        records = records.filter(r => (r.barangay || '').toLowerCase() === params.barangay!.toLowerCase());
+        records = records.filter(r =>
+          (r.barangay || '').toLowerCase() === params.barangay!.toLowerCase()
+        );
       }
+
       if (params?.status && params.status !== 'all') {
-        records = records.filter(r => (r.status || '').toLowerCase() === params.status!.toLowerCase());
+        records = records.filter(r =>
+          (r.status || '').toLowerCase() === params.status!.toLowerCase()
+        );
       }
+
       if (params?.readyToSell !== undefined) {
-        records = records.filter(r => Boolean(r.readyToSell || r.status === 'ready_to_sell') === params.readyToSell);
+        records = records.filter(
+          r => Boolean(r.readyToSell || r.status === 'ready_to_sell') === params.readyToSell
+        );
       }
+
       if (params?.isArchived !== undefined) {
-        records = records.filter(r => Boolean(r.isArchived) === params.isArchived);
+        records = records.filter(
+          r => Boolean(r.isArchived) === params.isArchived
+        );
       }
+
       if (params?.search) {
         const q = params.search.toLowerCase();
         records = records.filter(r =>
@@ -201,81 +214,113 @@ export const storageService = {
           (r.breed || '').toLowerCase().includes(q)
         );
       }
+
       return { records, total: records.length };
     }
 
     try {
       const searchParams = new URLSearchParams();
+
       if (params?.barangay && params.barangay !== 'all') {
         searchParams.set('barangay', params.barangay);
       }
+
       if (params?.search) {
         searchParams.set('search', params.search);
       }
+
       if (params?.status && params.status !== 'all') {
         searchParams.set('status', params.status);
       }
+
       if (params?.readyToSell !== undefined) {
         searchParams.set('readyToSell', String(params.readyToSell));
       }
+
       if (params?.isArchived !== undefined) {
         searchParams.set('isArchived', String(params.isArchived));
       }
+
       if (params?.page) {
         searchParams.set('page', String(params.page));
       }
+
       if (params?.perPage) {
         searchParams.set('per_page', String(params.perPage));
       }
 
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
       const user = this.getCurrentUser();
+
       if (user) {
         headers['x-user-role'] = user.role || 'focal';
         headers['x-user-id'] = user.id || '';
         headers['x-user-name'] = user.username || user.name || '';
-        if (user.assignedBarangay) headers['x-user-assigned-barangay'] = user.assignedBarangay;
-        if (user.barangay_id) headers['x-user-barangay-id'] = user.barangay_id;
+
+        if (user.assignedBarangay) {
+          headers['x-user-assigned-barangay'] = user.assignedBarangay;
+        }
+
+        if (user.barangay_id) {
+          headers['x-user-barangay-id'] = user.barangay_id;
+        }
       }
 
       const queryString = searchParams.toString();
       const endpoint = `/api/swine-records${queryString ? `?${queryString}` : ''}`;
 
-      const res = await fetch(endpoint, { method: 'GET', headers });
-      if (res.ok) {
-        const json = await res.json();
-        if (json && json.success && Array.isArray(json.data)) {
-          const records: SwineRecord[] = json.data;
-          this.saveSwineRecords(records);
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('swine_records_updated', { detail: records }));
-          }
-          return { records, total: json.total ?? records.length };
-        }
-      }
-    } catch (err) {
-      console.warn('Network fetch failed, serving from local cache:', err);
-    }
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers,
+      });
 
-    let local = this.getSwineRecords();
-    if (params?.barangay && params.barangay !== 'all') {
-      local = local.filter(r => (r.barangay || '').toLowerCase() === params.barangay!.toLowerCase());
-    }
-    if (params?.status && params.status !== 'all') {
-      local = local.filter(r => (r.status || '').toLowerCase() === params.status!.toLowerCase());
-    }
-    if (params?.readyToSell !== undefined) {
-      local = local.filter(r => Boolean(r.readyToSell || r.status === 'ready_to_sell') === params.readyToSell);
-    }
-    if (params?.search) {
-      const q = params.search.toLowerCase();
-      local = local.filter(r =>
-        (r.pigIdTag || '').toLowerCase().includes(q) ||
-        (r.farmerName || '').toLowerCase().includes(q) ||
-        (r.barangay || '').toLowerCase().includes(q)
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        throw new Error(
+          `Cloud database request failed (HTTP ${res.status}): ${errorText || res.statusText}`
+        );
+      }
+
+      const json = await res.json();
+
+      if (!json || json.success !== true || !Array.isArray(json.data)) {
+        throw new Error(
+          'The cloud database returned an invalid swine-record response.'
+        );
+      }
+
+      const records: SwineRecord[] = json.data;
+
+      // Cache only records that were successfully retrieved from the cloud.
+      this.saveSwineRecords(records);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('swine_records_updated', {
+            detail: records,
+          })
+        );
+      }
+
+      return {
+        records,
+        total:
+          typeof json.total === 'number'
+            ? json.total
+            : records.length,
+      };
+    } catch (error) {
+      // IMPORTANT: Do not silently fall back to localStorage while online.
+      // Supabase/Vercel must remain the authoritative source of truth.
+      console.error('Cloud database fetch failed:', error);
+
+      throw new Error(
+        'Unable to connect to the central Swine Registry database. Please check the Vercel/Supabase connection.'
       );
     }
-    return { records: local, total: local.length };
   },
 
   saveSwineRecords(records: SwineRecord[]): void {
@@ -421,16 +466,12 @@ export const storageService = {
     return fullRecord;
   },
 
-  addSwineRecord(record: SwineRecord): void {
-    this.saveSwineRecordCloud(record, false).catch(err => {
-      console.warn('Asynchronous cloud save notice:', err.message);
-    });
+  async addSwineRecord(record: SwineRecord): Promise<SwineRecord> {
+    return await this.saveSwineRecordCloud(record, false);
   },
 
-  updateSwineRecord(updated: SwineRecord): void {
-    this.saveSwineRecordCloud(updated, true).catch(err => {
-      console.warn('Asynchronous cloud update notice:', err.message);
-    });
+  async updateSwineRecord(updated: SwineRecord): Promise<SwineRecord> {
+    return await this.saveSwineRecordCloud(updated, true);
   },
 
   async deleteSwineRecordCloud(id: string): Promise<boolean> {
