@@ -99,21 +99,9 @@ function createMemPool() {
 export const createPool = () => {
   if (!global._postgresPool) {
     const connectionString =
-  process.env.DATABASE_URL ||
-  process.env.SUPABASE_DATABASE_URL ||
-  process.env.POSTGRES_URL;
-
-if (!connectionString) {
-  throw new Error(
-    'DATABASE_URL is required. Supabase PostgreSQL is not configured.'
-  );
-}
-
-    const connectionString =
-      process.env.DATABASE_URL ||
-      process.env.SUPABASE_DATABASE_URL ||
-      process.env.POSTGRES_URL ||
-      DEFAULT_SUPABASE_URL;
+      process.env.DATABASE_URL?.trim() ||
+      process.env.SUPABASE_DATABASE_URL?.trim() ||
+      process.env.POSTGRES_URL?.trim();
 
     if (connectionString) {
       const isRemote =
@@ -140,11 +128,17 @@ if (!connectionString) {
 
       const poolConfig: PoolConfig = {
         host: process.env.SQL_HOST,
-        port: process.env.SQL_PORT ? parseInt(process.env.SQL_PORT, 10) : 5432,
+        port: process.env.SQL_PORT
+          ? parseInt(process.env.SQL_PORT, 10)
+          : 5432,
         user: process.env.SQL_USER || process.env.SQL_ADMIN_USER,
-        password: process.env.SQL_PASSWORD || process.env.SQL_ADMIN_PASSWORD,
+        password:
+          process.env.SQL_PASSWORD ||
+          process.env.SQL_ADMIN_PASSWORD,
         database: process.env.SQL_DB_NAME || 'postgres',
-        ssl: isSsl ? { rejectUnauthorized: false } : undefined,
+        ssl: isSsl
+          ? { rejectUnauthorized: false }
+          : undefined,
         max: 10,
         connectionTimeoutMillis: 15000,
         idleTimeoutMillis: 30000,
@@ -153,17 +147,29 @@ if (!connectionString) {
       global._postgresPool = new Pool(poolConfig);
       global._isPgMem = false;
     } else {
-      // Automatic embedded PostgreSQL engine when no external database is configured
-      console.log('⚡ Initializing embedded PostgreSQL engine (pg-mem) for local operations...');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error(
+          'DATABASE_URL is required in production. Configure the Supabase PostgreSQL connection in Vercel Environment Variables.'
+        );
+      }
+
+      console.log(
+        '⚡ Initializing embedded PostgreSQL engine (pg-mem) for local development...'
+      );
+
       global._postgresPool = createMemPool();
     }
 
     if (global._postgresPool && !global._isPgMem) {
       global._postgresPool.on('error', (err: any) => {
-        console.warn('PostgreSQL pool idle client notice:', err.message);
+        console.warn(
+          'PostgreSQL pool idle client notice:',
+          err.message
+        );
       });
     }
   }
+
   return global._postgresPool;
 };
 
