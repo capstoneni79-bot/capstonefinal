@@ -98,8 +98,16 @@ function createMemPool() {
 
 export const createPool = () => {
   if (!global._postgresPool) {
-    const DEFAULT_SUPABASE_URL =
-      'postgresql://postgres:cpaasonteni@db.wuxivpxsnixabfvlunvg.supabase.co:5432/postgres';
+    const connectionString =
+  process.env.DATABASE_URL ||
+  process.env.SUPABASE_DATABASE_URL ||
+  process.env.POSTGRES_URL;
+
+if (!connectionString) {
+  throw new Error(
+    'DATABASE_URL is required. Supabase PostgreSQL is not configured.'
+  );
+}
 
     const connectionString =
       process.env.DATABASE_URL ||
