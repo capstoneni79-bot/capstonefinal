@@ -154,6 +154,52 @@ CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_reg_schema_key ON registry_schema(field_key);
 CREATE INDEX IF NOT EXISTS idx_reg_schema_order ON registry_schema(field_order);
 
+-- 11. Row Level Security (RLS) & Access Policies
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE swine_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE issued_certificates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media_files ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE registry_schema ENABLE ROW LEVEL SECURITY;
+
+-- Allow full access for backend server and authorized roles
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to users' AND tablename = 'users') THEN
+    CREATE POLICY "Allow server full access to users" ON users FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to swine_records' AND tablename = 'swine_records') THEN
+    CREATE POLICY "Allow server full access to swine_records" ON swine_records FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to issued_certificates' AND tablename = 'issued_certificates') THEN
+    CREATE POLICY "Allow server full access to issued_certificates" ON issued_certificates FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to messages' AND tablename = 'messages') THEN
+    CREATE POLICY "Allow server full access to messages" ON messages FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to media_files' AND tablename = 'media_files') THEN
+    CREATE POLICY "Allow server full access to media_files" ON media_files FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to audit_logs' AND tablename = 'audit_logs') THEN
+    CREATE POLICY "Allow server full access to audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to system_settings' AND tablename = 'system_settings') THEN
+    CREATE POLICY "Allow server full access to system_settings" ON system_settings FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Allow server full access to registry_schema' AND tablename = 'registry_schema') THEN
+    CREATE POLICY "Allow server full access to registry_schema" ON registry_schema FOR ALL USING (true) WITH CHECK (true);
+  END IF;
+END $$;
+
 -- ============================================================================
 -- End of Supabase Schema Initialization
 -- ============================================================================
