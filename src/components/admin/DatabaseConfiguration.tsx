@@ -122,7 +122,20 @@ export const DatabaseConfiguration: React.FC = () => {
         body: JSON.stringify({ connectionString: uriToTest }),
       });
 
-      const data = await res.json().catch(() => ({ success: false, message: 'Server returned non-JSON response.' }));
+      let data: any = null;
+      try {
+        const cloned = res.clone();
+        data = await res.json().catch(async () => {
+          const rawText = await cloned.text().catch(() => '');
+          const cleanText = rawText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+          return {
+            success: false,
+            message: `Server returned status ${res.status}${cleanText ? ': ' + cleanText.slice(0, 140) : ''}`,
+          };
+        });
+      } catch (err: any) {
+        data = { success: false, message: `Could not parse response: ${err.message}` };
+      }
 
       if (res.ok && data.success) {
         setTestResult({
