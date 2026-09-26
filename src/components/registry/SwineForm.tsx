@@ -156,8 +156,8 @@ export const SwineForm: React.FC<SwineFormProps> = ({
 
   const [farmerName, setFarmerName] = useState(initialData?.farmerName || '');
   
-  // Strict 11-digit Contact Number state
-  const cleanInitialContact = (initialData?.farmerContact || '').replace(/\D/g, '').slice(0, 11);
+  // Strict 10-digit Contact Number state
+  const cleanInitialContact = (initialData?.farmerContact || '').replace(/\D/g, '').slice(0, 10);
   const [farmerContact, setFarmerContact] = useState<string>(cleanInitialContact);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactTouched, setContactTouched] = useState<boolean>(false);
