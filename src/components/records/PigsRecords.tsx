@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Search,
   ArrowUpDown,
@@ -238,12 +238,42 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
   // Table Print & Import States
   const [showPrintModal, setShowPrintModal] = useState<boolean>(false);
   const [showPrintMenu, setShowPrintMenu] = useState<boolean>(false);
+  const [showImportMenu, setShowImportMenu] = useState<boolean>(false);
+  const [importFileType, setImportFileType] = useState<'csv' | 'xlsx' | 'all'>('all');
+  const printMenuRef = useRef<HTMLDivElement>(null);
+  const importMenuRef = useRef<HTMLDivElement>(null);
   const [showPrintSelectModal, setShowPrintSelectModal] = useState<boolean>(false);
   const [printSelectedColumnIds, setPrintSelectedColumnIds] = useState<Record<string, boolean>>({});
   const [printValidationError, setPrintValidationError] = useState<string | null>(null);
   const [activePrintColumns, setActivePrintColumns] = useState<ActiveFieldItem[]>([]);
   const [showImportModal, setShowImportModal] = useState<boolean>(false);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string>('');
+
+  // Click-outside and Escape key handling for Print and Import dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (printMenuRef.current && !printMenuRef.current.contains(event.target as Node)) {
+        setShowPrintMenu(false);
+      }
+      if (importMenuRef.current && !importMenuRef.current.contains(event.target as Node)) {
+        setShowImportMenu(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowPrintMenu(false);
+        setShowImportMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Logo customization for Official Print Report
   const [reportLeftLogo, setReportLeftLogo] = useState<string>('/icon.svg');
@@ -997,26 +1027,84 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
             <span>{t('records_columns', 'Columns')}</span>
           </button>
 
-          {/* Import Records */}
+          {/* Consolidated Import Dropdown */}
           {currentRole !== 'agent' && (
-            <button
-              type="button"
-              onClick={() => setShowImportModal(true)}
-              className="px-3 py-1.5 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-              title="Import Swine Records from Device or Backend"
-            >
-              <Upload className="w-3.5 h-3.5 text-purple-700" />
-              <span>{t('records_import', 'Import')}</span>
-            </button>
+            <div className="relative inline-block text-left" ref={importMenuRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowImportMenu(prev => !prev);
+                  setShowPrintMenu(false);
+                }}
+                aria-expanded={showImportMenu}
+                aria-haspopup="true"
+                className="px-3 py-1.5 rounded-xl border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-900 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
+                title="Import Swine Records"
+              >
+                <Upload className="w-3.5 h-3.5 text-purple-700" />
+                <span>{t('records_import', 'Import')}</span>
+                <ChevronDown className={`w-3 h-3 text-purple-600 transition-transform ${showImportMenu ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showImportMenu && (
+                <div className="absolute left-0 mt-1.5 w-60 bg-white rounded-2xl shadow-xl border border-stone-200 py-2 z-40 animate-fadeIn">
+                  <div className="px-3.5 py-1 text-[11px] font-black text-stone-400 uppercase tracking-wider">
+                    IMPORT RECORDS
+                  </div>
+                  <div className="my-1 border-t border-stone-100" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFileType('csv');
+                      setShowImportMenu(false);
+                      setShowImportModal(true);
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-xs text-stone-800 hover:bg-purple-50 hover:text-purple-950 font-semibold flex items-center gap-2.5 cursor-pointer transition"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-purple-600 shrink-0" />
+                    <span>📥 Import CSV</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFileType('xlsx');
+                      setShowImportMenu(false);
+                      setShowImportModal(true);
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-xs text-stone-800 hover:bg-purple-50 hover:text-purple-950 font-semibold flex items-center gap-2.5 cursor-pointer transition"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>📥 Import Excel Spreadsheet</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImportFileType('all');
+                      setShowImportMenu(false);
+                      setShowImportModal(true);
+                    }}
+                    className="w-full text-left px-3.5 py-2 text-xs text-stone-800 hover:bg-purple-50 hover:text-purple-950 font-semibold flex items-center gap-2.5 cursor-pointer transition"
+                  >
+                    <Upload className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span>📥 Import Records File</span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Print Menu Dropdown */}
-          <div className="relative inline-block text-left">
+          {/* Consolidated Print / Export Dropdown */}
+          <div className="relative inline-block text-left" ref={printMenuRef}>
             <button
               type="button"
-              onClick={() => setShowPrintMenu(prev => !prev)}
+              onClick={() => {
+                setShowPrintMenu(prev => !prev);
+                setShowImportMenu(false);
+              }}
+              aria-expanded={showPrintMenu}
+              aria-haspopup="true"
               className="px-3 py-1.5 rounded-xl border border-stone-300 hover:bg-stone-100 bg-white text-stone-700 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-              title="Print Swine Records Table"
+              title="Print and Export Records"
             >
               <Printer className="w-3.5 h-3.5 text-stone-600" />
               <span>{t('records_print', 'Print')}</span>
@@ -1024,7 +1112,11 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
             </button>
 
             {showPrintMenu && (
-              <div className="absolute right-0 mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-stone-200 py-1.5 z-40 animate-fadeIn">
+              <div className="absolute right-0 mt-1.5 w-60 bg-white rounded-2xl shadow-xl border border-stone-200 py-2 z-40 animate-fadeIn">
+                <div className="px-3.5 py-1 text-[11px] font-black text-stone-400 uppercase tracking-wider">
+                  PRINT / EXPORT
+                </div>
+                <div className="my-1 border-t border-stone-100" />
                 <button
                   type="button"
                   onClick={() => {
@@ -1036,11 +1128,33 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
                 >
                   <Printer className="w-4 h-4 text-emerald-700 shrink-0" />
                   <div>
-                    <div className="font-bold">{t('records_print_complete', 'Print Complete Table')}</div>
+                    <div className="font-bold">🖨 Print Current Records</div>
                     <div className="text-[10px] text-stone-500 font-normal">
-                      {t('records_print_complete_desc', `Print all ${activeFields.length} active columns`)}
+                      Print all {activeFields.length} active columns
                     </div>
                   </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPrintMenu(false);
+                    exportToExcel();
+                  }}
+                  className="w-full text-left px-3.5 py-2 text-xs text-stone-800 hover:bg-emerald-50 hover:text-emerald-950 font-semibold flex items-center gap-2.5 cursor-pointer transition"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <div className="font-bold">📄 Excel (.CSV)</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPrintMenu(false);
+                    exportToWord();
+                  }}
+                  className="w-full text-left px-3.5 py-2 text-xs text-stone-800 hover:bg-blue-50 hover:text-blue-950 font-semibold flex items-center gap-2.5 cursor-pointer transition"
+                >
+                  <FileText className="w-4 h-4 text-blue-700 shrink-0" />
+                  <div className="font-bold">📘 Word (.DOC)</div>
                 </button>
                 <div className="my-1 border-t border-stone-100" />
                 <button
@@ -1055,52 +1169,14 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
                     setShowPrintMenu(false);
                     setShowPrintSelectModal(true);
                   }}
-                  className="w-full text-left px-3.5 py-2 text-xs text-stone-800 hover:bg-emerald-50 hover:text-emerald-950 font-semibold flex items-center gap-2.5 cursor-pointer transition"
+                  className="w-full text-left px-3.5 py-1.5 text-xs text-stone-600 hover:bg-stone-50 hover:text-stone-900 font-medium flex items-center gap-2.5 cursor-pointer transition"
                 >
-                  <SlidersHorizontal className="w-4 h-4 text-blue-600 shrink-0" />
-                  <div>
-                    <div className="font-bold">{t('records_print_custom', 'Select Columns to Print')}</div>
-                    <div className="text-[10px] text-stone-500 font-normal">
-                      {t('records_print_custom_desc', 'Choose custom column selection')}
-                    </div>
-                  </div>
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                  <span className="text-[11px]">Select Columns to Print...</span>
                 </button>
               </div>
             )}
           </div>
-
-          {/* Export to Excel */}
-          <button
-            onClick={exportToExcel}
-            className="px-3 py-1.5 rounded-xl border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-            title="Export Records to Excel CSV"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-700" />
-            <span>{t('records_excel', 'Excel (.CSV)')}</span>
-          </button>
-
-          {/* Export to Word */}
-          <button
-            onClick={exportToWord}
-            className="px-3 py-1.5 rounded-xl border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-2xs"
-            title="Export Records to Microsoft Word Document"
-          >
-            <FileText className="w-3.5 h-3.5 text-blue-700" />
-            <span>{t('records_word', 'Word (.DOC)')}</span>
-          </button>
-
-          {/* Smart Import Spreadsheets Button */}
-          {currentRole !== 'agent' && (
-            <button
-              type="button"
-              onClick={() => setShowImportModal(true)}
-              className="px-3.5 py-1.5 rounded-xl border border-emerald-600 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-              title="Import Swine Registry Spreadsheets (.xlsx, .xls, .csv)"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>{t('records_import_btn', 'Import Spreadsheets')}</span>
-            </button>
-          )}
 
           {/* Bulk Delete Button (Admin only, active when records selected) */}
           {currentRole === 'admin' && selectedRecordIds.size > 0 && (
@@ -3471,6 +3547,7 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
       <ImportSwineModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+        initialFileType={importFileType}
         onSuccess={count => {
           setImportSuccessMsg(`Successfully imported ${count} swine record${count > 1 ? 's' : ''}!`);
           onRefresh();

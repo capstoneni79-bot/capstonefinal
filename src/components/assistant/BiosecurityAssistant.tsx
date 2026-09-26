@@ -20,6 +20,7 @@ import {
   Sliders,
   Palette,
   Check,
+  GripHorizontal,
 } from 'lucide-react';
 import { Barangay, SwineRecord, UserAccount, UserRole } from '../../types';
 import {
@@ -74,6 +75,125 @@ export const BiosecurityAssistant: React.FC<BiosecurityAssistantProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+
+  // Movable / draggable state with sessionStorage persistence
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('da_assistant_pos_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
+
+  const isDraggingRef = useRef(false);
+  const dragStartRef = useRef<{ startX: number; startY: number; panelLeft: number; panelTop: number; pointerId: number } | null>(null);
+  const hasMovedRef = useRef(false);
+
+  // Keep assistant panel clamped within viewport on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      setPosition(prev => {
+        if (!prev) return null;
+        const panel = panelRef.current;
+        const panelWidth = panel?.offsetWidth || 440;
+        const panelHeight = panel?.offsetHeight || (isMinimized ? 60 : 580);
+        const maxX = Math.max(8, window.innerWidth - panelWidth - 8);
+        const maxY = Math.max(8, window.innerHeight - panelHeight - 8);
+        const clampedX = Math.max(8, Math.min(maxX, prev.x));
+        const clampedY = Math.max(8, Math.min(maxY, prev.y));
+        if (clampedX !== prev.x || clampedY !== prev.y) {
+          const next = { x: clampedX, y: clampedY };
+          try {
+            sessionStorage.setItem('da_assistant_pos_v1', JSON.stringify(next));
+          } catch (e) {}
+          return next;
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isMinimized]);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button') || target.closest('input') || target.closest('textarea')) {
+      return;
+    }
+
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const rect = panel.getBoundingClientRect();
+    isDraggingRef.current = true;
+    hasMovedRef.current = false;
+    dragStartRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      panelLeft: rect.left,
+      panelTop: rect.top,
+      pointerId: e.pointerId,
+    };
+
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch (err) {}
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current || !dragStartRef.current) return;
+    const dx = e.clientX - dragStartRef.current.startX;
+    const dy = e.clientY - dragStartRef.current.startY;
+
+    if (Math.hypot(dx, dy) > 4) {
+      hasMovedRef.current = true;
+    }
+
+    if (hasMovedRef.current) {
+      const panel = panelRef.current;
+      const panelWidth = panel?.offsetWidth || 440;
+      const panelHeight = panel?.offsetHeight || (isMinimized ? 60 : 580);
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      const rawX = dragStartRef.current.panelLeft + dx;
+      const rawY = dragStartRef.current.panelTop + dy;
+
+      const clampedX = Math.max(8, Math.min(viewportWidth - panelWidth - 8, rawX));
+      const clampedY = Math.max(8, Math.min(viewportHeight - panelHeight - 8, rawY));
+
+      const newPos = { x: Math.round(clampedX), y: Math.round(clampedY) };
+      setPosition(newPos);
+      try {
+        sessionStorage.setItem('da_assistant_pos_v1', JSON.stringify(newPos));
+      } catch (err) {}
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    const didMove = hasMovedRef.current;
+    isDraggingRef.current = false;
+    dragStartRef.current = null;
+
+    if (!didMove) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('button')) {
+        setIsMinimized(prev => !prev);
+      }
+    }
+  };
 
   const getInitialWelcomeMessage = (): ChatMessage => {
     if (isPublicMode) {
@@ -472,6 +592,7 @@ I am connected to your live municipal swine database, GIS coordinates, ASF risk 
       ───────────────────────────────────────────────────────────── */}
       {isOpen && (
         <aside
+          ref={panelRef}
           aria-label={
             isPublicMode
               ? 'DA Hinunangan Public Information Assistant Panel'
@@ -479,20 +600,37 @@ I am connected to your live municipal swine database, GIS coordinates, ASF risk 
               ? 'DA Hinunangan Super Admin Configuration Assistant Panel'
               : 'DA Hinunangan Biosecurity Assistant Panel'
           }
-          className={`fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 w-[94vw] sm:w-[440px] bg-white rounded-3xl shadow-2xl border border-stone-200 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
+          className={`fixed z-40 w-[94vw] sm:w-[440px] bg-white rounded-3xl shadow-2xl border border-stone-200 flex flex-col overflow-hidden transition-[height] duration-200 ease-in-out ${
+            position ? '' : 'bottom-4 right-4 sm:bottom-6 sm:right-6'
+          } ${
             isMinimized ? 'h-14 sm:h-16' : 'h-[580px] max-h-[85vh]'
           }`}
           style={{
+            ...(position
+              ? {
+                  left: `${position.x}px`,
+                  top: `${position.y}px`,
+                  bottom: 'auto',
+                  right: 'auto',
+                }
+              : {}),
             boxShadow: '0 20px 50px -10px rgba(6, 78, 59, 0.25), 0 10px 20px -5px rgba(0, 0, 0, 0.1)',
+            touchAction: 'none',
           }}
         >
-          {/* Header Bar */}
-          <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-white p-3.5 sm:p-4 flex items-center justify-between gap-2.5 shrink-0 select-none shadow-xs">
+          {/* Header Bar (Draggable handle with pointer events) */}
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-white p-3.5 sm:p-4 flex items-center justify-between gap-2.5 shrink-0 select-none shadow-xs cursor-grab active:cursor-grabbing touch-none"
+            title="Drag to reposition or click to toggle panel"
+          >
             <div
-              onClick={() => setIsMinimized(prev => !prev)}
-              className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 group"
-              title={isMinimized ? 'Click to expand chat' : 'Click to minimize'}
+              className="flex items-center gap-2.5 min-w-0 flex-1 group pointer-events-none"
             >
+              <GripHorizontal className="w-3.5 h-3.5 text-emerald-400/70 shrink-0" />
               <div className="relative shrink-0">
                 <img
                   src={assistantLogo}

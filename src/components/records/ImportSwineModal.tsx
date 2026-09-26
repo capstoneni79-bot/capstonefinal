@@ -66,6 +66,7 @@ interface ImportSwineModalProps {
   barangays: Barangay[];
   currentUser: UserAccount | null;
   existingRecords: SwineRecord[];
+  initialFileType?: 'csv' | 'xlsx' | 'all';
 }
 
 type ImportStep = 'upload' | 'mapping' | 'validation' | 'importing' | 'completed';
@@ -77,6 +78,7 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
   barangays,
   currentUser,
   existingRecords,
+  initialFileType = 'all',
 }) => {
   const currentLang = languageService.getLanguage();
   const t = (key: any, fallbackOrParams?: any, fallback?: string) =>
@@ -814,7 +816,13 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
                   type="file"
                   ref={fileInputRef}
                   onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-                  accept=".xlsx,.xls,.csv"
+                  accept={
+                    initialFileType === 'csv'
+                      ? '.csv'
+                      : initialFileType === 'xlsx'
+                      ? '.xlsx,.xls'
+                      : '.xlsx,.xls,.csv'
+                  }
                   className="hidden"
                 />
 
@@ -824,11 +832,15 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
 
                 <div>
                   <h3 className="text-base font-bold text-stone-900">
-                    Drag and drop your spreadsheet here, or{' '}
+                    Drag and drop your {initialFileType === 'csv' ? 'CSV file' : initialFileType === 'xlsx' ? 'Excel spreadsheet' : 'records file'} here, or{' '}
                     <span className="text-emerald-700 underline underline-offset-2">Browse Files</span>
                   </h3>
                   <p className="text-xs text-stone-500 mt-1">
-                    Supports Microsoft Excel (.xlsx, .xls) and Comma-Separated Values (.csv).
+                    {initialFileType === 'csv'
+                      ? 'Supports Comma-Separated Values (.csv).'
+                      : initialFileType === 'xlsx'
+                      ? 'Supports Microsoft Excel (.xlsx, .xls).'
+                      : 'Supports Microsoft Excel (.xlsx, .xls) and Comma-Separated Values (.csv).'}
                   </p>
                 </div>
 

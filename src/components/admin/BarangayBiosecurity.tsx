@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Shield,
   AlertTriangle,
@@ -16,9 +16,12 @@ import {
   Send,
   Check,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Info,
+  Sparkles,
 } from 'lucide-react';
-import { Barangay, BarangayBiosecurityAudit, BiosecurityIncident, RiskLevel, UserAccount } from '../../types';
+import { Barangay, BarangayBiosecurityAudit, BiosecurityIncident, RiskLevel, SwineRecord, UserAccount } from '../../types';
 import { storageService } from '../../services/storageService';
 
 interface BarangayBiosecurityProps {
@@ -200,11 +203,132 @@ export const BarangayBiosecurity: React.FC<BarangayBiosecurityProps> = ({
     onRefresh();
   };
 
+  // Real Swine records from Supabase / storageService
+  const [allSwineRecords, setAllSwineRecords] = useState<SwineRecord[]>(() =>
+    storageService.getSwineRecords()
+  );
+
+  useEffect(() => {
+    setAllSwineRecords(storageService.getSwineRecords());
+  }, [barangays]);
+
+  // Role-based barangay visibility:
+  // Admin & Super Admin: All municipal barangays
+  // Focal Person: Strictly assigned barangay
+  // Agent: Permitted barangays only
+  const authorizedBarangays = useMemo(() => {
+    const role = (currentRole || currentUser?.role || '').toLowerCase();
+    const isSuperAdmin = role === 'superadmin' || role === 'super_admin' || currentUser?.role === 'super_admin';
+    const isAdmin = role === 'admin' || currentUser?.role === 'admin';
+
+    if (isSuperAdmin || isAdmin) {
+      return barangays;
+    }
+
+    if (role === 'focal' && currentUser?.assignedBarangay) {
+      const assigned = currentUser.assignedBarangay.trim().toLowerCase();
+      const matches = barangays.filter(
+        b => b.name.toLowerCase() === assigned || b.id.toLowerCase() === assigned
+      );
+      return matches.length > 0 ? matches : barangays.filter(b => b.name.toLowerCase().includes(assigned));
+    }
+
+    if (role === 'agent' && currentUser?.assignedBarangay) {
+      const assigned = currentUser.assignedBarangay.trim().toLowerCase();
+      return barangays.filter(
+        b => b.name.toLowerCase() === assigned || b.id.toLowerCase() === assigned
+      );
+    }
+
+    return barangays;
+  }, [barangays, currentRole, currentUser]);
+
+  // Selected Barangay (collapsible by default for admin/superadmin, auto-selected for focal person)
+  const [selectedBarangayId, setSelectedBarangayId] = useState<string | null>(() => {
+    const role = (currentRole || currentUser?.role || '').toLowerCase();
+    if (role === 'focal' && currentUser?.assignedBarangay) {
+      const assigned = currentUser.assignedBarangay.trim().toLowerCase();
+      const match = barangays.find(
+        b => b.name.toLowerCase() === assigned || b.id.toLowerCase() === assigned
+      );
+      return match ? match.id : null;
+    }
+    return null;
+  });
+
+  const [isBarangayDropdownOpen, setIsBarangayDropdownOpen] = useState(false);
+  const [barangaySearchText, setBarangaySearchText] = useState('');
+  const barangayDropdownRef = useRef<HTMLDivElement>(null);
+  const [showAllGrid, setShowAllGrid] = useState(false);
+
+  // Click-outside and Escape key listener for barangay dropdown
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        barangayDropdownRef.current &&
+        !barangayDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsBarangayDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsBarangayDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const dropdownFilteredBarangays = useMemo(() => {
+    if (!barangaySearchText.trim()) return authorizedBarangays;
+    const term = barangaySearchText.toLowerCase();
+    return authorizedBarangays.filter(
+      b =>
+        b.name.toLowerCase().includes(term) ||
+        (b.focalPersonName || '').toLowerCase().includes(term) ||
+        (b.code || '').toLowerCase().includes(term)
+    );
+  }, [authorizedBarangays, barangaySearchText]);
+
+  const selectedBarangay = useMemo(() => {
+    if (!selectedBarangayId) return null;
+    return authorizedBarangays.find(b => b.id === selectedBarangayId) || null;
+  }, [authorizedBarangays, selectedBarangayId]);
+
   // Combine barangays with their audits
   const barangayAuditMap = new Map<string, BarangayBiosecurityAudit>();
   audits.forEach(a => barangayAuditMap.set(a.barangay.toLowerCase(), a));
 
-  const filteredBarangays = barangays.filter(b => {
+  const selectedAudit = useMemo(() => {
+    if (!selectedBarangay) return null;
+    return barangayAuditMap.get(selectedBarangay.name.toLowerCase()) || null;
+  }, [selectedBarangay, barangayAuditMap]);
+
+  const selectedSwine = useMemo(() => {
+    if (!selectedBarangay) return [];
+    return allSwineRecords.filter(
+      s => !s.isArchived && s.barangay?.trim().toLowerCase() === selectedBarangay.name.trim().toLowerCase()
+    );
+  }, [selectedBarangay, allSwineRecords]);
+
+  const selectedAffectedCount = useMemo(() => {
+    return selectedSwine.filter(
+      s => s.status === 'sick' || s.status === 'quarantined' || s.asfStatus === 'suspected_asf' || s.asfStatus === 'asf_positive'
+    ).length;
+  }, [selectedSwine]);
+
+  const selectedReadyCount = useMemo(() => {
+    return selectedSwine.filter(
+      s => s.readyToSell || (s.weightKg && s.weightKg >= 80)
+    ).length;
+  }, [selectedSwine]);
+
+  const filteredBarangays = authorizedBarangays.filter(b => {
     const audit = barangayAuditMap.get(b.name.toLowerCase());
     const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (b.focalPersonName || '').toLowerCase().includes(searchQuery.toLowerCase());
@@ -214,9 +338,9 @@ export const BarangayBiosecurity: React.FC<BarangayBiosecurityProps> = ({
   });
 
   // Summary Metrics
-  const greenCount = barangays.filter(b => b.riskLevel === 'green').length;
-  const yellowCount = barangays.filter(b => b.riskLevel === 'yellow').length;
-  const redCount = barangays.filter(b => b.riskLevel === 'red').length;
+  const greenCount = authorizedBarangays.filter(b => b.riskLevel === 'green').length;
+  const yellowCount = authorizedBarangays.filter(b => b.riskLevel === 'yellow').length;
+  const redCount = authorizedBarangays.filter(b => b.riskLevel === 'red').length;
   const level3Count = audits.filter(a => a.biosecurityLevel === 3).length;
   const activeIncidents = incidents.filter(i => !i.resolved).length;
 
@@ -227,13 +351,121 @@ export const BarangayBiosecurity: React.FC<BarangayBiosecurityProps> = ({
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-500/10 to-transparent pointer-events-none" />
         
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-2xl">
+          <div className="space-y-3 max-w-2xl">
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
               Barangay Biosecurity & ASF Zone Protection
             </h1>
             <p className="text-sm text-emerald-100/80 leading-relaxed">
               Standardized biosecurity compliance audit for all 40 Hinunangan barangays, disinfectant barrier checkpoints, swill-feeding prohibitions, and rapid outbreak isolation.
             </p>
+
+            {/* Collapsible Barangay Selector */}
+            <div className="pt-2" ref={barangayDropdownRef}>
+              <div className="text-[11px] font-black uppercase tracking-wider text-emerald-300 mb-1 flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5" />
+                <span>BARANGAYS</span>
+              </div>
+
+              <div className="relative inline-block text-left">
+                <button
+                  type="button"
+                  onClick={() => setIsBarangayDropdownOpen(prev => !prev)}
+                  aria-expanded={isBarangayDropdownOpen}
+                  aria-haspopup="true"
+                  className="px-4 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 border border-white/30 text-white font-bold text-xs flex items-center gap-3 transition cursor-pointer shadow-md backdrop-blur-md min-w-[260px] justify-between"
+                  title="Select Barangay"
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-emerald-300 font-semibold">Barangay:</span>
+                    <span className="font-extrabold text-white truncate">
+                      {selectedBarangay ? `[ ${selectedBarangay.name} ▼ ]` : '[ Select Barangay ▼ ]'}
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-3.5 h-3.5 text-emerald-300 transition-transform ${isBarangayDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isBarangayDropdownOpen && (
+                  <div className="absolute left-0 mt-2 w-80 sm:w-96 bg-white rounded-3xl shadow-2xl border border-stone-200 p-3 z-50 animate-fadeIn text-stone-900">
+                    {/* Search Barangay Input */}
+                    <div className="relative mb-2">
+                      <Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400" />
+                      <input
+                        type="text"
+                        value={barangaySearchText}
+                        onChange={e => setBarangaySearchText(e.target.value)}
+                        placeholder="🔍 Search Barangay..."
+                        autoFocus
+                        className="w-full pl-9 pr-3 py-2 text-xs border border-stone-300 rounded-xl focus:ring-2 focus:ring-emerald-600 outline-none text-stone-900 bg-stone-50"
+                      />
+                    </div>
+
+                    <div className="text-[10px] font-black uppercase tracking-wider text-stone-400 px-2 py-1 flex items-center justify-between">
+                      <span>Authorized Barangays ({dropdownFilteredBarangays.length})</span>
+                      {currentRole === 'focal' && <span className="text-emerald-700">Assigned Only</span>}
+                    </div>
+
+                    <div className="max-h-60 overflow-y-auto custom-sidebar-scroll space-y-1 mt-1 pr-1">
+                      {dropdownFilteredBarangays.map(b => {
+                        const isSelected = selectedBarangayId === b.id;
+                        const bgSwine = allSwineRecords.filter(s => !s.isArchived && s.barangay?.toLowerCase() === b.name.toLowerCase()).length;
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedBarangayId(b.id);
+                              setIsBarangayDropdownOpen(false);
+                              setBarangaySearchText('');
+                              setShowAllGrid(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 transition cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-800 text-white shadow-xs'
+                                : 'hover:bg-emerald-50 text-stone-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <span
+                                className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                  b.riskLevel === 'green'
+                                    ? 'bg-emerald-500'
+                                    : b.riskLevel === 'yellow'
+                                    ? 'bg-amber-500'
+                                    : 'bg-red-500'
+                                }`}
+                              />
+                              <span className="truncate">{b.name}</span>
+                              <span className="text-[10px] opacity-70">({b.code})</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 text-[10px]">
+                              <span className={`px-1.5 py-0.5 rounded font-mono ${
+                                isSelected ? 'bg-white/20 text-white' : 'bg-stone-100 text-stone-600'
+                              }`}>
+                                {bgSwine} pigs
+                              </span>
+                              <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${
+                                b.riskLevel === 'green'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : b.riskLevel === 'yellow'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {b.riskLevel}
+                              </span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                      {dropdownFilteredBarangays.length === 0 && (
+                        <div className="text-center py-4 text-xs text-stone-400">
+                          No matching barangay found.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
@@ -408,197 +640,513 @@ export const BarangayBiosecurity: React.FC<BarangayBiosecurityProps> = ({
 
       {/* Main Content Area */}
       {activeSubTab === 'audits' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredBarangays.map(b => {
-            const audit = barangayAuditMap.get(b.name.toLowerCase());
-            const score = audit?.complianceScore ?? 75;
-            const level = audit?.biosecurityLevel ?? (score >= 90 ? 3 : score >= 70 ? 2 : 1);
-            const isCompliant = score >= 75 && b.riskLevel === 'green';
+        <>
+          {/* STATE 1: COLLAPSED INITIAL STATE (NO BARANGAY SELECTED YET & NOT VIEWING ALL GRID) */}
+          {!selectedBarangay && !showAllGrid && (
+            <div className="bg-white rounded-3xl border border-stone-200 p-8 sm:p-12 text-center space-y-5 shadow-xs animate-fadeIn">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center justify-center mx-auto shadow-inner">
+                <Shield className="w-8 h-8 text-emerald-700" />
+              </div>
+              <div className="space-y-1.5 max-w-lg mx-auto">
+                <h2 className="text-xl font-bold text-stone-900">Select a Barangay to Inspect Biosecurity</h2>
+                <p className="text-xs text-stone-500 leading-relaxed">
+                  African Swine Fever zone protection, bio-exclusion protocols, and registered livestock counts are tracked per barangay. Use the selector above or button below to view a specific barangay dossier.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBarangayDropdownOpen(true)}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md transition"
+                >
+                  <MapPin className="w-4 h-4" />
+                  <span>Select Barangay ▼</span>
+                </button>
+                {currentRole !== 'focal' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllGrid(true)}
+                    className="px-4 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition border border-stone-200"
+                  >
+                    <span>View All 40 Barangays Grid</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
-            return (
-              <div
-                key={b.id}
-                className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4"
-              >
-                <div>
-                  {/* Card Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-stone-900 text-base">Brgy. {b.name}</h3>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
-                          {b.code}
-                        </span>
-                      </div>
-                      <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1">
-                        <MapPin className="w-3 h-3 text-stone-400" />
-                        <span>Focal: {b.focalPersonName || 'Municipal Office'}</span>
-                      </p>
-                    </div>
-
-                    {/* Zone Badge */}
+          {/* STATE 2: SINGLE BARANGAY BIOSECURITY DOSSIER */}
+          {selectedBarangay && !showAllGrid && (
+            <div className="space-y-6 animate-fadeIn">
+              {/* Barangay Dossier Header Card */}
+              <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-2xl font-black text-stone-900">
+                      Barangay {selectedBarangay.name}
+                    </h2>
+                    <span className="font-mono text-xs px-2 py-0.5 rounded-lg bg-stone-100 text-stone-600 border border-stone-200">
+                      {selectedBarangay.code}
+                    </span>
                     <span
-                      className={`text-[11px] font-black uppercase px-2.5 py-1 rounded-full flex items-center gap-1 ${
-                        b.riskLevel === 'green'
+                      className={`text-xs font-black uppercase px-2.5 py-1 rounded-full flex items-center gap-1 ${
+                        selectedBarangay.riskLevel === 'green'
                           ? 'bg-emerald-100 text-emerald-800'
-                          : b.riskLevel === 'yellow'
+                          : selectedBarangay.riskLevel === 'yellow'
                           ? 'bg-amber-100 text-amber-800'
                           : 'bg-red-100 text-red-800'
                       }`}
                     >
                       <span
                         className={`w-2 h-2 rounded-full ${
-                          b.riskLevel === 'green'
+                          selectedBarangay.riskLevel === 'green'
                             ? 'bg-emerald-600'
-                            : b.riskLevel === 'yellow'
+                            : selectedBarangay.riskLevel === 'yellow'
                             ? 'bg-amber-600'
                             : 'bg-red-600'
                         }`}
                       />
-                      <span>{b.riskLevel} Zone</span>
+                      <span>{selectedBarangay.riskLevel} Zone</span>
                     </span>
                   </div>
+                  <p className="text-xs text-stone-500 flex items-center gap-2">
+                    <span>Focal Person: <strong className="text-stone-800">{selectedBarangay.focalPersonName || 'Municipal Office'}</strong></span>
+                  </p>
+                </div>
 
-                  {/* Biosecurity Score & Level Indicator */}
-                  <div className="mt-4 p-3 rounded-xl bg-stone-50 border border-stone-100 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-stone-600 font-semibold">Biosecurity Rating</span>
-                      <span className="font-extrabold text-stone-900">
-                        Level {level} ({score}%)
-                      </span>
-                    </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const targetAudit = selectedAudit || {
+                        id: `audit-${selectedBarangay.id}`,
+                        barangay: selectedBarangay.name,
+                        auditDate: new Date().toISOString().split('T')[0],
+                        auditorName: currentUser?.name || 'MAO Inspector',
+                        biosecurityLevel: 2,
+                        complianceScore: 85,
+                        footbathsOperational: true,
+                        vehicleDisinfectionStation: true,
+                        quarantineCheckpointActive: true,
+                        deadSwineDisposalFacility: true,
+                        swillFeedingBanEnforced: true,
+                        visitorLogCompliance: true,
+                        waterChlorination: true,
+                        perimeterFencingAudit: true,
+                        asfZone: selectedBarangay.riskLevel,
+                        status: 'compliant',
+                        notes: '',
+                        updatedAt: new Date().toISOString(),
+                      };
+                      setPrintingAudit(targetAudit);
+                    }}
+                    className="px-3.5 py-2 rounded-xl border border-stone-300 hover:bg-stone-50 text-stone-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                    title="Print Official Biosecurity Certificate"
+                  >
+                    <Printer className="w-4 h-4 text-stone-600" />
+                    <span>Print Certificate</span>
+                  </button>
 
-                    {/* Progress Bar */}
-                    <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          score >= 85 ? 'bg-emerald-600' : score >= 70 ? 'bg-amber-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${Math.min(100, score)}%` }}
-                      />
-                    </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuditForm({
+                        id: selectedAudit?.id,
+                        barangay: selectedBarangay.name,
+                        auditDate: selectedAudit?.auditDate || new Date().toISOString().split('T')[0],
+                        auditorName: selectedAudit?.auditorName || currentUser?.name || 'MAO Biosecurity Officer',
+                        biosecurityLevel: selectedAudit?.biosecurityLevel ?? 2,
+                        complianceScore: selectedAudit?.complianceScore ?? 85,
+                        footbathsOperational: selectedAudit?.footbathsOperational ?? true,
+                        vehicleDisinfectionStation: selectedAudit?.vehicleDisinfectionStation ?? true,
+                        quarantineCheckpointActive: selectedAudit?.quarantineCheckpointActive ?? true,
+                        deadSwineDisposalFacility: selectedAudit?.deadSwineDisposalFacility ?? true,
+                        swillFeedingBanEnforced: selectedAudit?.swillFeedingBanEnforced ?? true,
+                        visitorLogCompliance: selectedAudit?.visitorLogCompliance ?? true,
+                        waterChlorination: selectedAudit?.waterChlorination ?? true,
+                        perimeterFencingAudit: selectedAudit?.perimeterFencingAudit ?? true,
+                        asfZone: selectedBarangay.riskLevel,
+                        status: selectedAudit?.status || 'compliant',
+                        notes: selectedAudit?.notes || '',
+                      });
+                      setIsAuditModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Conduct Audit</span>
+                  </button>
 
-                    <div className="flex items-center justify-between text-[10px] text-stone-500">
-                      <span>Basic (L1)</span>
-                      <span>Mitigated (L2)</span>
-                      <span>Certified (L3)</span>
-                    </div>
-                  </div>
-
-                  {/* Audit Checklist Chips */}
-                  <div className="mt-3 grid grid-cols-2 gap-1.5 text-[11px]">
-                    <div className="flex items-center gap-1.5 text-stone-700">
-                      {audit?.footbathsOperational !== false ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                      )}
-                      <span className="truncate">Active Footbaths</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-stone-700">
-                      {audit?.swillFeedingBanEnforced !== false ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                      )}
-                      <span className="truncate">No Swill Feeding</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-stone-700">
-                      {audit?.vehicleDisinfectionStation ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                      )}
-                      <span className="truncate">Tire Disinfection</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 text-stone-700">
-                      {audit?.quarantineCheckpointActive ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      ) : (
-                        <XCircle className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                      )}
-                      <span className="truncate">Checkpoint Guard</span>
-                    </div>
-                  </div>
-
-                  {audit?.notes && (
-                    <p className="mt-3 text-[11px] text-stone-500 italic bg-white p-2 rounded-lg border border-stone-100">
-                      "{audit.notes}"
-                    </p>
+                  {currentRole !== 'focal' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllGrid(true)}
+                      className="px-3 py-2 rounded-xl text-xs font-semibold text-stone-500 hover:text-stone-800 hover:bg-stone-100 transition cursor-pointer"
+                      title="View all municipal barangays"
+                    >
+                      View All Barangays
+                    </button>
                   )}
                 </div>
+              </div>
 
-                {/* Footer Controls */}
-                <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
-                  <span className="text-[10px] text-stone-400">
-                    Last audit: {audit?.auditDate || 'Recently registered'}
-                  </span>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => {
-                        const targetAudit = audit || {
-                          id: `audit-${b.id}`,
-                          barangay: b.name,
-                          auditDate: new Date().toISOString().split('T')[0],
-                          auditorName: currentUser?.name || 'MAO Inspector',
-                          biosecurityLevel: level,
-                          complianceScore: score,
-                          footbathsOperational: true,
-                          vehicleDisinfectionStation: true,
-                          quarantineCheckpointActive: true,
-                          deadSwineDisposalFacility: true,
-                          swillFeedingBanEnforced: true,
-                          visitorLogCompliance: true,
-                          waterChlorination: true,
-                          perimeterFencingAudit: true,
-                          asfZone: b.riskLevel,
-                          status: isCompliant ? 'compliant' : 'warning',
-                          notes: '',
-                          updatedAt: new Date().toISOString(),
-                        };
-                        setPrintingAudit(targetAudit);
-                      }}
-                      className="p-1.5 rounded-lg text-stone-500 hover:text-stone-800 hover:bg-stone-100 transition cursor-pointer"
-                      title="Print Official Biosecurity Certificate"
-                    >
-                      <Printer className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setAuditForm({
-                          id: audit?.id,
-                          barangay: b.name,
-                          auditDate: audit?.auditDate || new Date().toISOString().split('T')[0],
-                          auditorName: audit?.auditorName || currentUser?.name || 'MAO Biosecurity Officer',
-                          biosecurityLevel: level,
-                          complianceScore: score,
-                          footbathsOperational: audit?.footbathsOperational ?? true,
-                          vehicleDisinfectionStation: audit?.vehicleDisinfectionStation ?? true,
-                          quarantineCheckpointActive: audit?.quarantineCheckpointActive ?? true,
-                          deadSwineDisposalFacility: audit?.deadSwineDisposalFacility ?? true,
-                          swillFeedingBanEnforced: audit?.swillFeedingBanEnforced ?? true,
-                          visitorLogCompliance: audit?.visitorLogCompliance ?? true,
-                          waterChlorination: audit?.waterChlorination ?? true,
-                          perimeterFencingAudit: audit?.perimeterFencingAudit ?? true,
-                          asfZone: b.riskLevel,
-                          status: audit?.status || 'compliant',
-                          notes: audit?.notes || '',
-                        });
-                        setIsAuditModalOpen(true);
-                      }}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center gap-1 transition cursor-pointer"
-                    >
-                      <span>Update Audit</span>
-                      <ChevronRight className="w-3 h-3" />
-                    </button>
+              {/* The 7 Key Biosecurity & ASF Metric Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* 1. ASF STATUS */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">1. ASF STATUS</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-3.5 h-3.5 rounded-full ${
+                      selectedBarangay.riskLevel === 'green' ? 'bg-emerald-500' : selectedBarangay.riskLevel === 'yellow' ? 'bg-amber-500' : 'bg-red-500'
+                    }`} />
+                    <span className="text-lg font-black text-stone-900 uppercase">
+                      {selectedBarangay.riskLevel === 'green' ? 'Green Zone (Free)' : selectedBarangay.riskLevel === 'yellow' ? 'Yellow Zone (Buffer)' : 'Red Zone (Quarantine)'}
+                    </span>
                   </div>
+                  <p className="text-xs text-stone-500">
+                    {selectedBarangay.riskLevel === 'green'
+                      ? 'Certified African Swine Fever Free municipal sector'
+                      : selectedBarangay.riskLevel === 'yellow'
+                      ? 'Active biosurveillance & buffer protection zone'
+                      : 'High-risk containment zone with movement ban'}
+                  </p>
+                </div>
+
+                {/* 2. Biosecurity Level */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">2. Biosecurity Level</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xl font-black text-stone-900">
+                      Level {selectedAudit?.biosecurityLevel ?? 2}
+                    </span>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                      {selectedAudit?.complianceScore ?? 85}% Score
+                    </span>
+                  </div>
+                  <div className="w-full bg-stone-100 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-emerald-600 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${selectedAudit?.complianceScore ?? 85}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    {(selectedAudit?.complianceScore ?? 85) >= 90 ? 'Advanced Bio-exclusion Standard' : (selectedAudit?.complianceScore ?? 85) >= 70 ? 'Standard Bio-exclusion Standard' : 'Basic / Upgrade Required'}
+                  </p>
+                </div>
+
+                {/* 3. Registered Swine */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">3. Registered Swine</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-black text-stone-900">{selectedSwine.length}</span>
+                    <span className="text-xs text-stone-500 font-semibold">Total Heads</span>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    {selectedSwine.filter(s => s.farmType === 'backyard').length} Backyard • {selectedSwine.filter(s => s.farmType === 'commercial').length} Commercial
+                  </p>
+                </div>
+
+                {/* 4. Affected Swine */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">4. Affected Swine</span>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-2xl font-black ${selectedAffectedCount > 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {selectedAffectedCount}
+                    </span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      selectedAffectedCount > 0 ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'
+                    }`}>
+                      {selectedAffectedCount > 0 ? 'Under Quarantine' : 'Zero Reported'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    {selectedAffectedCount > 0 ? 'Sick / quarantined / suspected hog heads' : 'All herds verified healthy with no symptoms'}
+                  </p>
+                </div>
+
+                {/* 5. Ready for Take-Off */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">5. Ready for Take-Off</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-2xl font-black text-amber-700">{selectedReadyCount}</span>
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900">
+                      Market-Ready
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    Heads eligible for official shipping / sale permit
+                  </p>
+                </div>
+
+                {/* 6. Last Inspection */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">6. Last Inspection</span>
+                  <div className="text-base font-black text-stone-900 truncate">
+                    {selectedAudit?.auditDate ? selectedAudit.auditDate : 'Pending Initial Audit'}
+                  </div>
+                  <p className="text-xs text-stone-500 truncate">
+                    By: {selectedAudit?.auditorName || 'MAO Biosecurity Officer'}
+                  </p>
+                </div>
+
+                {/* 7. Risk / Zone Status */}
+                <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs space-y-2 sm:col-span-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-stone-500">7. Risk/Zone Status</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-black uppercase ${
+                      selectedBarangay.riskLevel === 'green'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : selectedBarangay.riskLevel === 'yellow'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedBarangay.riskLevel} Zone
+                    </span>
+                    <span className="text-xs font-bold text-stone-800">
+                      {selectedBarangay.riskLevel === 'green'
+                        ? 'Low Risk — Inter-barangay Swine Transit Authorized'
+                        : selectedBarangay.riskLevel === 'yellow'
+                        ? 'Moderate Risk — Strict Buffer Disinfection Checkpoint'
+                        : 'Critical Risk — Complete Swine Movement Quarantine'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-stone-500">
+                    {selectedBarangay.riskLevel === 'green'
+                      ? 'Focal person certified compliance. Swill feeding prohibited under Municipal EO. Shipping allowed with Veterinary Health Certificate.'
+                      : selectedBarangay.riskLevel === 'yellow'
+                      ? 'Heightened biosurveillance active. Disinfection barrier checkpoints operational at all barangay boundary access points.'
+                      : 'Emergency isolation protocol enforced. Transport prohibited. Immediate reporting of dead or symptomatic animals required.'}
+                  </p>
                 </div>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Biosecurity Checklist Panel for this Barangay */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                  <div>
+                    <h3 className="font-bold text-stone-900 text-sm">
+                      Bio-Exclusion & Containment Checklist — Brgy. {selectedBarangay.name}
+                    </h3>
+                    <p className="text-xs text-stone-500">Official DA-BAI biosecurity inspection checklist</p>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                    Score: {selectedAudit?.complianceScore ?? 85}%
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.footbathsOperational !== false ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Operational Footbaths</div>
+                      <div className="text-[10px] text-stone-500">At farm/pen entry</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.swillFeedingBanEnforced !== false ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Swill Feeding Ban</div>
+                      <div className="text-[10px] text-stone-500">Zero food scraps</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.vehicleDisinfectionStation ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Tire Disinfection Station</div>
+                      <div className="text-[10px] text-stone-500">Vehicle spray barrier</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.quarantineCheckpointActive ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Quarantine Checkpoint</div>
+                      <div className="text-[10px] text-stone-500">Active monitoring</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.deadSwineDisposalFacility ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Disposal Pit Facility</div>
+                      <div className="text-[10px] text-stone-500">Sanitary burial pit</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.visitorLogCompliance ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Visitor Logbook</div>
+                      <div className="text-[10px] text-stone-500">Traceability record</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.waterChlorination ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Water Chlorination</div>
+                      <div className="text-[10px] text-stone-500">Disinfected supply</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-stone-200 bg-stone-50 flex items-center gap-2.5">
+                    {selectedAudit?.perimeterFencingAudit ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-stone-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="text-xs font-bold text-stone-800">Perimeter Fence Audit</div>
+                      <div className="text-[10px] text-stone-500">Stray animal exclusion</div>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedAudit?.notes && (
+                  <div className="p-3 rounded-xl bg-stone-50 border border-stone-200 text-xs text-stone-600 italic">
+                    "{selectedAudit.notes}"
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STATE 3: FULL GRID (ONLY SHOWN IF USER EXPLICITLY SWITCHES TO SHOW ALL) */}
+          {showAllGrid && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between bg-stone-100 p-3 rounded-2xl">
+                <span className="text-xs font-bold text-stone-700">
+                  Showing All 40 Municipal Barangays Grid ({filteredBarangays.length} matching)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowAllGrid(false)}
+                  className="px-3 py-1.5 rounded-xl bg-white border border-stone-300 text-stone-800 text-xs font-bold hover:bg-stone-50 cursor-pointer"
+                >
+                  ← Back to Collapsed / Selected View
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredBarangays.map(b => {
+                  const audit = barangayAuditMap.get(b.name.toLowerCase());
+                  const score = audit?.complianceScore ?? 75;
+                  const level = audit?.biosecurityLevel ?? (score >= 90 ? 3 : score >= 70 ? 2 : 1);
+                  const isCompliant = score >= 75 && b.riskLevel === 'green';
+
+                  return (
+                    <div
+                      key={b.id}
+                      onClick={() => {
+                        setSelectedBarangayId(b.id);
+                        setShowAllGrid(false);
+                      }}
+                      className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs hover:shadow-md transition flex flex-col justify-between space-y-4 cursor-pointer group"
+                    >
+                      <div>
+                        {/* Card Header */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-stone-900 text-base group-hover:text-emerald-700 transition">
+                                Brgy. {b.name}
+                              </h3>
+                              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-100 text-stone-600">
+                                {b.code}
+                              </span>
+                            </div>
+                            <p className="text-xs text-stone-500 mt-0.5 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-stone-400" />
+                              <span>Focal: {b.focalPersonName || 'Municipal Office'}</span>
+                            </p>
+                          </div>
+
+                          {/* Zone Badge */}
+                          <span
+                            className={`text-[11px] font-black uppercase px-2.5 py-1 rounded-full flex items-center gap-1 ${
+                              b.riskLevel === 'green'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : b.riskLevel === 'yellow'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full ${
+                                b.riskLevel === 'green'
+                                  ? 'bg-emerald-600'
+                                  : b.riskLevel === 'yellow'
+                                  ? 'bg-amber-600'
+                                  : 'bg-red-600'
+                              }`}
+                            />
+                            <span>{b.riskLevel} Zone</span>
+                          </span>
+                        </div>
+
+                        {/* Biosecurity Score & Level Indicator */}
+                        <div className="mt-4 p-3 rounded-xl bg-stone-50 border border-stone-100 space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-stone-600 font-semibold">Biosecurity Rating</span>
+                            <span className="font-extrabold text-stone-900">
+                              Level {level} ({score}%)
+                            </span>
+                          </div>
+
+                          <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${
+                                score >= 85 ? 'bg-emerald-600' : score >= 70 ? 'bg-amber-500' : 'bg-red-500'
+                              }`}
+                              style={{ width: `${Math.min(100, score)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-stone-100 flex items-center justify-between text-xs">
+                        <span className="text-[10px] text-stone-400">
+                          Click to inspect dossier
+                        </span>
+                        <ChevronRight className="w-4 h-4 text-emerald-700" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Subtab: Disinfection Checkpoints */}
