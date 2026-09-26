@@ -285,30 +285,26 @@ export const storageService = {
     }
   },
 
-  addSwineRecord(record: SwineRecord): void {
-    // Backend/Database Layer Validation: Contact number must be valid Philippine mobile format
+  async saveSwineRecordCloud(record: SwineRecord, isEdit: boolean = false): Promise<SwineRecord> {
     const contactDigits = (record.farmerContact || '').replace(/\D/g, '');
     if (!record.farmerContact || typeof record.farmerContact !== 'string' || !(contactDigits.length === 10 || contactDigits.length === 11 || contactDigits.length === 12)) {
-      throw new Error('Contact number must be a valid Philippine mobile number.');
+      throw new Error('Contact number must be a valid Philippine mobile number (11 digits, e.g. 09171234567).');
     }
 
     const records = this.getSwineRecords();
-    const isOffline = this.isEffectiveOffline();
-
-    // Comprehensive validation
     const pigIdTag = (record.pigIdTag || record.earTagNo || '').trim();
     const validation = validateSwineRecordForSave(
       {
         ...record,
         pigIdTag,
       },
-      records
+      records,
+      isEdit ? record.id : undefined
     );
     if (!validation.isValid) {
       throw new Error(validation.errorMessage || 'Invalid swine record data.');
     }
 
-    // Derive calculated fields consistently
     const ageResult = calculateSwineAge(record.birthDate);
     const safeDays = ageResult.isValid ? ageResult.days : (record.ageDays || 0);
     const safeMonths = ageResult.isValid ? ageResult.months : (record.ageMonths || 0);
@@ -316,7 +312,7 @@ export const storageService = {
     const farmScale = record.farmScale || classifyFarmScale(record.penCapacity || (record.farmType === 'commercial' ? 50 : 5));
     const asfZone = record.asfZone || getBarangayASFZone(record.barangay);
 
-    const newRecord: SwineRecord = {
+    const fullRecord: SwineRecord = {
       ...record,
       pigIdTag,
       earTagNo: pigIdTag,
@@ -328,13 +324,11 @@ export const storageService = {
       farmScale,
       asfZone,
       farmerContact: record.farmerContact.trim(),
-      isSynced: !isOffline,
       updatedAt: new Date().toISOString(),
     };
-    records.unshift(newRecord);
-    this.saveSwineRecords(records);
 
-    // Sync to backend API if reachable
+    const isOffline = this.isEffectiveOffline();
+
     if (!isOffline && typeof fetch !== 'undefined') {
       const user = this.getCurrentUser();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -346,135 +340,120 @@ export const storageService = {
         if (user.barangay_id) headers['x-user-barangay-id'] = user.barangay_id;
       }
 
-      fetch('/api/swine', {
-        method: 'POST',
+      const endpoint = isEdit ? `/api/swine/${encodeURIComponent(fullRecord.id)}` : '/api/swine';
+      const method = isEdit ? 'PUT' : 'POST';
+
+      const res = await fetch(endpoint, {
+        method,
         headers,
-        body: JSON.stringify(newRecord),
-      })
-        .then(async res => {
-          if (res.ok) {
-            const data = await res.json().catch(() => null);
-            if (data && data.success) {
-              const currentRecords = this.getSwineRecords();
-              const recIndex = currentRecords.findIndex(r => r.id === newRecord.id);
-              if (recIndex !== -1) {
-                currentRecords[recIndex].isSynced = true;
-                this.saveSwineRecords(currentRecords);
-              }
-            }
+        body: JSON.stringify(fullRecord),
+      });
+
+      if (!res.ok) {
+        let errMessage = `Cloud database error (HTTP ${res.status})`;
+        try {
+          const errJson = await res.json();
+          if (errJson && errJson.error) {
+            errMessage = errJson.error;
           }
-        })
-        .catch(() => {});
+        } catch {
+          // ignore parsing error
+        }
+        throw new Error(errMessage);
+      }
+
+      const resData = await res.json();
+      if (!resData || !resData.success) {
+        throw new Error(resData?.error || 'Failed to save record to cloud database.');
+      }
+
+      const savedRecord: SwineRecord = resData.data || resData.record || fullRecord;
+      savedRecord.isSynced = true;
+
+      const currentRecords = this.getSwineRecords();
+      if (isEdit) {
+        const idx = currentRecords.findIndex(r => r.id === savedRecord.id);
+        if (idx !== -1) {
+          currentRecords[idx] = savedRecord;
+        } else {
+          currentRecords.unshift(savedRecord);
+        }
+      } else {
+        const existingIdx = currentRecords.findIndex(r => r.id === savedRecord.id || (savedRecord.pigIdTag && r.pigIdTag === savedRecord.pigIdTag));
+        if (existingIdx !== -1) {
+          currentRecords[existingIdx] = savedRecord;
+        } else {
+          currentRecords.unshift(savedRecord);
+        }
+      }
+
+      this.saveSwineRecords(currentRecords);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('swine_records_updated', { detail: currentRecords }));
+      }
+
+      return savedRecord;
     }
 
-    if (isOffline) {
-      this.enqueueOfflineAction({
-        id: 'queue-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-        action: 'create',
-        entity: 'swine',
-        data: newRecord,
-        timestamp: new Date().toISOString(),
-      });
+    // Offline fallback
+    fullRecord.isSynced = false;
+    const currentRecords = this.getSwineRecords();
+    if (isEdit) {
+      const idx = currentRecords.findIndex(r => r.id === fullRecord.id);
+      if (idx !== -1) currentRecords[idx] = fullRecord;
+      else currentRecords.unshift(fullRecord);
+    } else {
+      currentRecords.unshift(fullRecord);
     }
+    this.saveSwineRecords(currentRecords);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('swine_records_updated', { detail: currentRecords }));
+    }
+
+    this.enqueueOfflineAction({
+      id: 'queue-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      action: isEdit ? 'update' : 'create',
+      entity: 'swine',
+      data: fullRecord,
+      timestamp: new Date().toISOString(),
+    });
+
+    return fullRecord;
+  },
+
+  addSwineRecord(record: SwineRecord): void {
+    this.saveSwineRecordCloud(record, false).catch(err => {
+      console.warn('Asynchronous cloud save notice:', err.message);
+    });
   },
 
   updateSwineRecord(updated: SwineRecord): void {
-    // Backend/Database Layer Validation: Contact number must be valid Philippine mobile format
-    const contactDigits = (updated.farmerContact || '').replace(/\D/g, '');
-    if (!updated.farmerContact || typeof updated.farmerContact !== 'string' || !(contactDigits.length === 10 || contactDigits.length === 11 || contactDigits.length === 12)) {
-      throw new Error('Contact number must be a valid Philippine mobile number.');
-    }
-
-    const records = this.getSwineRecords();
-    const isOffline = this.isEffectiveOffline();
-    const index = records.findIndex(r => r.id === updated.id);
-    if (index !== -1) {
-      const existing = records[index];
-      // Pig ID Tag must remain immutable when editing
-      const pigIdTag = existing.pigIdTag || existing.earTagNo || updated.pigIdTag || updated.earTagNo;
-
-      const validation = validateSwineRecordForSave(
-        {
-          ...updated,
-          pigIdTag,
-        },
-        records,
-        updated.id
-      );
-      if (!validation.isValid) {
-        throw new Error(validation.errorMessage || 'Invalid swine record data.');
-      }
-
-      const ageResult = calculateSwineAge(updated.birthDate);
-      const safeDays = ageResult.isValid ? ageResult.days : (updated.ageDays || 0);
-      const safeMonths = ageResult.isValid ? ageResult.months : (updated.ageMonths || 0);
-      const estimatedWeightKg = getEstimatedWeightRange(safeDays);
-      const farmScale = updated.farmScale || classifyFarmScale(updated.penCapacity || (updated.farmType === 'commercial' ? 50 : 5));
-      const asfZone = updated.asfZone || getBarangayASFZone(updated.barangay);
-
-      records[index] = {
-        ...updated,
-        pigIdTag,
-        earTagNo: pigIdTag,
-        ageDays: safeDays,
-        ageMonths: safeMonths,
-        estimatedWeightKg,
-        actualWeightKg: updated.actualWeightKg !== undefined ? updated.actualWeightKg : (updated.weightKg || null),
-        farmScale,
-        asfZone,
-        farmerContact: updated.farmerContact.trim(),
-        isSynced: !isOffline,
-        updatedAt: new Date().toISOString(),
-      };
-      this.saveSwineRecords(records);
-
-      if (!isOffline && typeof fetch !== 'undefined') {
-        const user = this.getCurrentUser();
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (user) {
-          headers['x-user-role'] = user.role || 'focal';
-          headers['x-user-id'] = user.id || '';
-          headers['x-user-name'] = user.username || user.name || '';
-          if (user.assignedBarangay) headers['x-user-assigned-barangay'] = user.assignedBarangay;
-          if (user.barangay_id) headers['x-user-barangay-id'] = user.barangay_id;
-        }
-
-        fetch(`/api/swine/${encodeURIComponent(updated.id)}`, {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify(records[index]),
-        })
-          .then(async res => {
-            if (res.ok) {
-              const currentRecords = this.getSwineRecords();
-              const recIndex = currentRecords.findIndex(r => r.id === updated.id);
-              if (recIndex !== -1) {
-                currentRecords[recIndex].isSynced = true;
-                this.saveSwineRecords(currentRecords);
-              }
-            }
-          })
-          .catch(() => {});
-      }
-
-      if (isOffline) {
-        this.enqueueOfflineAction({
-          id: 'queue-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-          action: 'update',
-          entity: 'swine',
-          data: records[index],
-          timestamp: new Date().toISOString(),
-        });
-      }
-    }
+    this.saveSwineRecordCloud(updated, true).catch(err => {
+      console.warn('Asynchronous cloud update notice:', err.message);
+    });
   },
 
-  deleteSwineRecord(id: string): void {
-    const records = this.getSwineRecords();
-    const filtered = records.filter(r => r.id !== id);
-    this.saveSwineRecords(filtered);
-
-    if (this.isEffectiveOffline()) {
+  async deleteSwineRecordCloud(id: string): Promise<boolean> {
+    const isOffline = this.isEffectiveOffline();
+    if (!isOffline && typeof fetch !== 'undefined') {
+      const user = this.getCurrentUser();
+      const res = await fetch(`/api/swine/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: {
+          'x-user-role': user?.role || 'admin',
+          'x-user-name': user?.name || 'Administrator',
+          'x-user-id': user?.id || 'admin',
+        },
+      });
+      if (!res.ok) {
+        let errMessage = `Delete failed (HTTP ${res.status})`;
+        try {
+          const json = await res.json();
+          if (json?.error) errMessage = json.error;
+        } catch {}
+        throw new Error(errMessage);
+      }
+    } else {
       this.enqueueOfflineAction({
         id: 'queue-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
         action: 'delete',
@@ -482,27 +461,47 @@ export const storageService = {
         data: { id },
         timestamp: new Date().toISOString(),
       });
-    } else {
+    }
+
+    const records = this.getSwineRecords();
+    const filtered = records.filter(r => r.id !== id);
+    this.saveSwineRecords(filtered);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('swine_records_updated', { detail: filtered }));
+    }
+    return true;
+  },
+
+  deleteSwineRecord(id: string): void {
+    this.deleteSwineRecordCloud(id).catch(err => {
+      console.warn('Cloud delete notice:', err.message);
+    });
+  },
+
+  async deleteSwineRecordsCloud(ids: string[]): Promise<boolean> {
+    if (!ids || ids.length === 0) return true;
+    const isOffline = this.isEffectiveOffline();
+    if (!isOffline && typeof fetch !== 'undefined') {
       const user = this.getCurrentUser();
-      fetch(`/api/swine/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
+      const res = await fetch('/api/swine/bulk-delete', {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'x-user-role': user?.role || 'admin',
           'x-user-name': user?.name || 'Administrator',
           'x-user-id': user?.id || 'admin',
         },
-      }).catch(err => console.warn('Cloud SQL delete sync notice:', err));
-    }
-  },
-
-  deleteSwineRecords(ids: string[]): void {
-    if (!ids || ids.length === 0) return;
-    const idSet = new Set(ids);
-    const records = this.getSwineRecords();
-    const filtered = records.filter(r => !idSet.has(r.id));
-    this.saveSwineRecords(filtered);
-
-    if (this.isEffectiveOffline()) {
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        let errMessage = `Bulk delete failed (HTTP ${res.status})`;
+        try {
+          const json = await res.json();
+          if (json?.error) errMessage = json.error;
+        } catch {}
+        throw new Error(errMessage);
+      }
+    } else {
       ids.forEach(id => {
         this.enqueueOfflineAction({
           id: 'queue-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
@@ -512,19 +511,22 @@ export const storageService = {
           timestamp: new Date().toISOString(),
         });
       });
-    } else {
-      const user = this.getCurrentUser();
-      fetch('/api/swine/bulk-delete', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-role': user?.role || 'admin',
-          'x-user-name': user?.name || 'Administrator',
-          'x-user-id': user?.id || 'admin',
-        },
-        body: JSON.stringify({ ids }),
-      }).catch(err => console.warn('Cloud SQL bulk delete sync notice:', err));
     }
+
+    const idSet = new Set(ids);
+    const records = this.getSwineRecords();
+    const filtered = records.filter(r => !idSet.has(r.id));
+    this.saveSwineRecords(filtered);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('swine_records_updated', { detail: filtered }));
+    }
+    return true;
+  },
+
+  deleteSwineRecords(ids: string[]): void {
+    this.deleteSwineRecordsCloud(ids).catch(err => {
+      console.warn('Cloud bulk delete notice:', err.message);
+    });
   },
 
   deleteAllSwineRecords(): void {

@@ -98,10 +98,14 @@ function createMemPool() {
 
 export const createPool = () => {
   if (!global._postgresPool) {
+    const DEFAULT_SUPABASE_URL =
+      'postgresql://postgres:cpaasonteni@db.wuxivpxsnixabfvlunvg.supabase.co:5432/postgres';
+
     const connectionString =
       process.env.DATABASE_URL ||
       process.env.SUPABASE_DATABASE_URL ||
-      process.env.POSTGRES_URL;
+      process.env.POSTGRES_URL ||
+      DEFAULT_SUPABASE_URL;
 
     if (connectionString) {
       const isRemote =
@@ -299,6 +303,14 @@ export async function initPostgresTables(): Promise<boolean> {
           password TEXT,
           created_at TIMESTAMP DEFAULT now()
         );
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS uid TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'focal';
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS assigned_barangay TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;
+        ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
 
         -- 2. Swine Records table
         CREATE TABLE IF NOT EXISTS swine_records (
@@ -328,6 +340,30 @@ export async function initPostgresTables(): Promise<boolean> {
           custom_fields JSONB,
           created_at TIMESTAMP DEFAULT now()
         );
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS computed_pig_id TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS pig_id_tag TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS ear_tag_no TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS farmer_name TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS farm_name TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS farmer_contact TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS barangay TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS birth_date TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS age_days INTEGER;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS age_months TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS estimated_weight_kg TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS actual_weight_kg TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS swine_type TEXT DEFAULT 'FATTER_GROWER';
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS farm_scale TEXT DEFAULT 'BACKYARD';
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS asf_zone TEXT DEFAULT 'RED';
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS biosecurity_warning BOOLEAN DEFAULT FALSE;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'HEALTHY';
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS ready_to_sell BOOLEAN DEFAULT FALSE;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS price_estimate TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS photo_url TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS is_archived BOOLEAN DEFAULT FALSE;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS registered_at TEXT;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS custom_fields JSONB;
+        ALTER TABLE swine_records ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
 
         -- 3. Issued Certificates table
         CREATE TABLE IF NOT EXISTS issued_certificates (
@@ -345,6 +381,18 @@ export async function initPostgresTables(): Promise<boolean> {
           status TEXT NOT NULL DEFAULT 'VALID',
           created_at TIMESTAMP DEFAULT now()
         );
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS control_number TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS swine_id TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS farmer_name TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS barangay TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS issue_date TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS purpose TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS destination TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS inspected_by TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS qr_payload TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS valid_until TEXT;
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'VALID';
+        ALTER TABLE issued_certificates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT now();
 
         -- 4. Messages table
         CREATE TABLE IF NOT EXISTS messages (

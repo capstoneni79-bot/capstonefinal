@@ -220,6 +220,32 @@ export default function App() {
     return () => window.removeEventListener('swine_records_updated', handleSwineUpdate);
   }, []);
 
+  // Multi-Device Real-Time Synchronization with Supabase Cloud
+  useEffect(() => {
+    // Periodic refresh every 15 seconds when active
+    const syncInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refreshAllData().catch(() => {});
+      }
+    }, 15000);
+
+    // Immediate refetch when user switches back to this browser tab or window
+    const handleFocusOrVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        refreshAllData().catch(() => {});
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+
+    return () => {
+      clearInterval(syncInterval);
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+    };
+  }, []);
+
   useEffect(() => {
     const handleCmsUpdate = (e: Event) => {
       const customEvt = e as CustomEvent;

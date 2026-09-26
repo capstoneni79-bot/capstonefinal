@@ -607,9 +607,13 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
   const paginatedRecords = sortedRecords.slice(startIndex, endIndex);
 
   // Handlers
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deleteConfirmRecord) return;
-    storageService.deleteSwineRecord(deleteConfirmRecord.id);
+    try {
+      await storageService.deleteSwineRecordCloud(deleteConfirmRecord.id);
+    } catch (err: any) {
+      console.warn('Cloud delete notice:', err?.message || err);
+    }
     setDeleteConfirmRecord(null);
     onRefresh();
   };
@@ -655,10 +659,14 @@ export const PigsRecords: React.FC<PigsRecordsProps> = ({
     setSelectedRecordIds(new Set());
   };
 
-  const handleConfirmBulkDelete = () => {
+  const handleConfirmBulkDelete = async () => {
     if (selectedRecordIds.size === 0) return;
     const idsToDelete: string[] = Array.from(selectedRecordIds);
-    storageService.deleteSwineRecords(idsToDelete);
+    try {
+      await storageService.deleteSwineRecordsCloud(idsToDelete);
+    } catch (err: any) {
+      console.warn('Cloud bulk delete notice:', err?.message || err);
+    }
     setSelectedRecordIds(new Set());
     setShowBulkDeleteModal(false);
     setBulkActionNotice(

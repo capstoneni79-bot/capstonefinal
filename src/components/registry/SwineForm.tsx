@@ -186,6 +186,8 @@ export const SwineForm: React.FC<SwineFormProps> = ({
     );
   });
   const [isOrdinanceExpanded, setIsOrdinanceExpanded] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Custom field values state for dynamic admin-created fields
   const [customFieldValues, setCustomFieldValues] = useState<Record<string, any>>(() => {
@@ -2178,7 +2180,7 @@ export const SwineForm: React.FC<SwineFormProps> = ({
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!farmerName.trim()) {
       alert('Please enter the Farmer / Owner Name');
@@ -2349,17 +2351,42 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       })(),
     };
 
-    if (initialData) {
-      storageService.updateSwineRecord(newRecord);
-    } else {
-      storageService.addSwineRecord(newRecord);
+    setIsSubmitting(true);
+    try {
+      const saved = await storageService.saveSwineRecordCloud(newRecord, Boolean(initialData));
+      onSuccess(saved);
+    } catch (err: any) {
+      console.error('Error saving swine record to Supabase cloud:', err);
+      const msg = err?.message || 'Failed to save swine record to Supabase cloud database. Please verify your connection and try again.';
+      setSubmitError(msg);
+      alert(`⚠️ Supabase Cloud Save Error:\n\n${msg}\n\nPlease check your internet connection and try again.`);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onSuccess(newRecord);
   };
 
   return (
     <div className="max-w-5xl mx-auto py-6 px-4">
+      {/* Cloud Save Error Banner */}
+      {submitError && (
+        <div className="mb-6 bg-red-50 border-2 border-red-300 rounded-3xl p-5 text-red-900 flex items-start gap-3 shadow-md animate-fade-in">
+          <AlertCircle className="w-6 h-6 text-red-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h4 className="font-bold text-sm text-red-900">Database Synchronization Error</h4>
+            <p className="text-xs text-red-700 mt-1 leading-relaxed">{submitError}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSubmitError(null)}
+                className="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-800 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Dismiss Notice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div className="bg-gradient-to-r from-emerald-900 via-teal-900 to-emerald-950 text-white rounded-3xl p-6 sm:p-7 mb-6 shadow-md border border-emerald-700/50 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -2602,10 +2629,21 @@ export const SwineForm: React.FC<SwineFormProps> = ({
 
           <button
             type="submit"
-            className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-black text-xs shadow-md hover:shadow-lg flex items-center gap-2 transition cursor-pointer"
+            disabled={isSubmitting}
+            className="px-6 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white font-black text-xs shadow-md hover:shadow-lg flex items-center gap-2 transition cursor-pointer"
           >
-            <Save className="w-4 h-4" />
-            <span>{initialData ? 'Update Swine Record' : 'Save Swine to Registry'}</span>
+            {isSubmitting ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4" />
+            )}
+            <span>
+              {isSubmitting
+                ? 'Saving to Supabase Cloud...'
+                : initialData
+                ? 'Update Swine Record'
+                : 'Save Swine to Registry'}
+            </span>
           </button>
         </div>
       </form>
