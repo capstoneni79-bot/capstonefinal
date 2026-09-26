@@ -159,6 +159,95 @@ export const pool = createPool();
 export const db = drizzle(pool, { schema });
 
 /**
+ * Tests a raw connection string without switching the current pool
+ */
+export async function testDatabaseConnection(connectionString: string): Promise<{ success: boolean; message: string; version?: string; swineCount?: number }> {
+  try {
+    const isRemote =
+      connectionString.includes('supabase') ||
+      connectionString.includes('sslmode=require') ||
+      process.env.NODE_ENV === 'production';
+
+    const testPool = new Pool({
+      connectionString,
+      ssl: isRemote ? { rejectUnauthorized: false } : undefined,
+      max: 2,
+      connectionTimeoutMillis: 10000,
+    });
+
+    const client = await testPool.connect();
+    let version = '';
+    let swineCount = 0;
+    try {
+      const vRes = await client.query('SELECT version()');
+      version = vRes.rows[0]?.version || '';
+      try {
+        const sRes = await client.query('SELECT COUNT(*) as count FROM swine_records');
+        swineCount = parseInt(sRes.rows[0]?.count || '0', 10);
+      } catch {
+        swineCount = 0;
+      }
+    } finally {
+      client.release();
+      await testPool.end().catch(() => {});
+    }
+
+    return {
+      success: true,
+      message: 'Successfully connected to PostgreSQL!',
+      version,
+      swineCount,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: err.message || 'Failed to connect to database',
+    };
+  }
+}
+
+/**
+ * Dynamically switches the active database connection pool and re-initializes tables
+ */
+export async function updateDatabaseConnection(connectionString: string): Promise<{ success: boolean; message: string }> {
+  try {
+    const testResult = await testDatabaseConnection(connectionString);
+    if (!testResult.success) {
+      return { success: false, message: testResult.message };
+    }
+
+    const isRemote =
+      connectionString.includes('supabase') ||
+      connectionString.includes('sslmode=require') ||
+      process.env.NODE_ENV === 'production';
+
+    const newPool = new Pool({
+      connectionString,
+      ssl: isRemote ? { rejectUnauthorized: false } : undefined,
+      max: 10,
+      connectionTimeoutMillis: 15000,
+      idleTimeoutMillis: 30000,
+    });
+
+    if (global._postgresPool && !global._isPgMem) {
+      try {
+        await global._postgresPool.end();
+      } catch {}
+    }
+
+    global._postgresPool = newPool;
+    global._isPgMem = false;
+    process.env.DATABASE_URL = connectionString;
+
+    await initPostgresTables();
+
+    return { success: true, message: 'Switched to new PostgreSQL connection successfully!' };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Failed to switch database pool' };
+  }
+}
+
+/**
  * Persists tables to disk when using the embedded PostgreSQL engine
  */
 export async function persistLocalDatabase(): Promise<void> {

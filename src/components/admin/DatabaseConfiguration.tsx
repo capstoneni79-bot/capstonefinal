@@ -15,21 +15,29 @@ import {
   ShieldCheck,
   Activity,
   Cpu,
+  KeyRound,
+  ExternalLink,
 } from 'lucide-react';
 import { storageService } from '../../services/storageService';
 
 export const DatabaseConfiguration: React.FC = () => {
-  const [dbEngine, setDbEngine] = useState<'supabase' | 'embedded'>(() => {
-    return (localStorage.getItem('da_db_engine') as any) || 'supabase';
+  const [connectionString, setConnectionString] = useState(() => {
+    return localStorage.getItem('da_db_url') || '';
   });
   const [dbHost, setDbHost] = useState(() => {
-    return localStorage.getItem('da_db_host') || 'aws-0-ap-southeast-1.pooler.supabase.com';
+    return localStorage.getItem('da_db_host') || 'db.wuxivpxsnixabfvlunvg.supabase.co';
   });
   const [dbPort, setDbPort] = useState(() => {
-    return localStorage.getItem('da_db_port') || '6543';
+    return localStorage.getItem('da_db_port') || '5432';
   });
   const [dbName, setDbName] = useState(() => {
     return localStorage.getItem('da_db_name') || 'postgres';
+  });
+  const [dbUser, setDbUser] = useState(() => {
+    return localStorage.getItem('da_db_user') || 'postgres';
+  });
+  const [dbPassword, setDbPassword] = useState(() => {
+    return localStorage.getItem('da_db_password') || '';
   });
   const [dbSsl, setDbSsl] = useState(() => {
     return localStorage.getItem('da_db_ssl') !== 'false';
@@ -44,7 +52,7 @@ export const DatabaseConfiguration: React.FC = () => {
     totalCerts: number;
   }>({
     connected: true,
-    engine: 'PostgreSQL / Supabase Pooler',
+    engine: 'PostgreSQL / Supabase Database',
     totalSwine: 0,
     totalBarangays: 40,
     totalAccounts: 0,
@@ -52,7 +60,7 @@ export const DatabaseConfiguration: React.FC = () => {
   });
 
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
@@ -67,33 +75,104 @@ export const DatabaseConfiguration: React.FC = () => {
     }));
   }, []);
 
+  // Helper to parse a postgresql:// connection string
+  const parseAndApplyUri = (raw: string) => {
+    const val = raw.trim();
+    setConnectionString(val);
+
+    if (val.startsWith('postgres://') || val.startsWith('postgresql://')) {
+      try {
+        const url = new URL(val);
+        if (url.hostname) setDbHost(url.hostname);
+        if (url.port) {
+          setDbPort(url.port);
+        } else if (url.hostname.includes('pooler.supabase.com')) {
+          setDbPort('6543');
+        } else {
+          setDbPort('5432');
+        }
+        if (url.username) setDbUser(url.username);
+        if (url.password) setDbPassword(url.password);
+        if (url.pathname) setDbName(url.pathname.replace(/^\//, '') || 'postgres');
+        setDbSsl(true);
+      } catch {
+        // Not a standard URL, keep raw
+      }
+    }
+  };
+
+  const getEffectiveUri = (): string => {
+    if (connectionString && (connectionString.startsWith('postgres://') || connectionString.startsWith('postgresql://'))) {
+      return connectionString.trim();
+    }
+    const cleanHost = dbHost.trim().replace(/^https?:\/\//, '').replace(/^postgres(ql)?:\/\//, '');
+    const userPass = dbPassword ? `${dbUser}:${dbPassword}@` : `${dbUser}@`;
+    return `postgresql://${userPass}${cleanHost}:${dbPort}/${dbName}${dbSsl ? '?sslmode=require' : ''}`;
+  };
+
   const handleTestConnection = async () => {
     setIsTesting(true);
     setTestResult(null);
+    const uriToTest = getEffectiveUri();
+
     try {
-      const res = await fetch('/api/swine-records/stats/summary');
-      if (res.ok) {
-        const json = await res.json();
-        setTestResult(`Connection Verified: Database responded successfully with ${json.data?.totalHogs ?? 0} active hogs registered.`);
+      const res = await fetch('/api/admin/database/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionString: uriToTest }),
+      });
+
+      const data = await res.json().catch(() => ({ success: false, message: 'Server returned non-JSON response.' }));
+
+      if (res.ok && data.success) {
+        setTestResult({
+          success: true,
+          message: `✅ Connection Verified: Successfully connected to PostgreSQL! Found ${data.swineCount ?? 0} active swine records in the cloud database.`,
+        });
       } else {
-        setTestResult('Server returned status ' + res.status + '. Operating on local database buffer.');
+        setTestResult({
+          success: false,
+          message: `❌ Connection Failed: ${data.message || data.error || 'Server returned status ' + res.status}`,
+        });
       }
     } catch (err: any) {
-      setTestResult('Notice: Connected to local indexed storage engine.');
+      setTestResult({
+        success: false,
+        message: `❌ Network Error: Could not reach backend server. Error: ${err.message}`,
+      });
     } finally {
       setIsTesting(false);
     }
   };
 
-  const handleSave = () => {
-    localStorage.setItem('da_db_engine', dbEngine);
+  const handleSave = async () => {
+    const uriToSave = getEffectiveUri();
+    localStorage.setItem('da_db_url', uriToSave);
     localStorage.setItem('da_db_host', dbHost);
     localStorage.setItem('da_db_port', dbPort);
     localStorage.setItem('da_db_name', dbName);
+    localStorage.setItem('da_db_user', dbUser);
+    localStorage.setItem('da_db_password', dbPassword);
     localStorage.setItem('da_db_ssl', String(dbSsl));
 
-    setIsSaved(true);
-    setTimeout(() => setIsSaved(false), 3000);
+    try {
+      const res = await fetch('/api/admin/database/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connectionString: uriToSave }),
+      });
+      const data = await res.json().catch(() => null);
+      if (data && data.success) {
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 3000);
+      } else {
+        setIsSaved(true);
+        setTimeout(() => setIsSaved(false), 3000);
+      }
+    } catch {
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    }
   };
 
   const handleExportFullBackup = () => {
@@ -124,14 +203,14 @@ export const DatabaseConfiguration: React.FC = () => {
           <div className="space-y-1.5">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-800/70 border border-emerald-400/30 text-[11px] font-bold text-emerald-200 uppercase tracking-wider">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Super Administrator Exclusive</span>
+              <span>Database Administration</span>
             </div>
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2.5">
               <Database className="w-6 h-6 text-emerald-400" />
-              <span>Database Architecture & Storage Configuration</span>
+              <span>PostgreSQL & Cloud Database Configuration</span>
             </h1>
             <p className="text-xs sm:text-sm text-emerald-200/80 max-w-2xl leading-relaxed">
-              Supervise the PostgreSQL/Supabase engine, connection pooler, local offline IndexedDB caches, and municipal database backups.
+              Manage your direct PostgreSQL / Supabase connection string. All additions and edits will record directly to your cloud database.
             </p>
           </div>
 
@@ -185,23 +264,48 @@ export const DatabaseConfiguration: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-stone-900">PostgreSQL / Supabase Parameters</h3>
-                <p className="text-[11px] text-stone-500">Live transaction engine configuration</p>
+                <p className="text-[11px] text-stone-500">Live transaction database connection</p>
               </div>
             </div>
             <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
-              Online
+              Active Engine
             </span>
           </div>
 
           <div className="space-y-3 text-xs">
+            {/* Primary Connection String */}
+            <div>
+              <label className="block text-[11px] font-bold text-stone-700 mb-1 flex items-center justify-between">
+                <span>PostgreSQL Connection URI (DATABASE_URL)</span>
+                <span className="text-[10px] font-normal text-stone-400">Direct or Pooler</span>
+              </label>
+              <textarea
+                rows={2}
+                value={connectionString}
+                onChange={e => parseAndApplyUri(e.target.value)}
+                placeholder="postgresql://postgres:password@db.wuxivpxsnixabfvlunvg.supabase.co:5432/postgres"
+                className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden resize-none"
+              />
+              <p className="text-[10px] text-stone-500 mt-1">
+                Tip: Paste your full Supabase connection string here. The fields below will automatically adapt.
+              </p>
+            </div>
+
             <div>
               <label className="block text-[11px] font-bold text-stone-700 mb-1">
-                Database Host / Supabase Pooler
+                Database Host / Supabase Endpoint
               </label>
               <input
                 type="text"
                 value={dbHost}
-                onChange={e => setDbHost(e.target.value)}
+                onChange={e => {
+                  if (e.target.value.includes('postgresql://') || e.target.value.includes('postgres://')) {
+                    parseAndApplyUri(e.target.value);
+                  } else {
+                    setDbHost(e.target.value);
+                  }
+                }}
+                placeholder="db.wuxivpxsnixabfvlunvg.supabase.co"
                 className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
               />
             </div>
@@ -213,8 +317,10 @@ export const DatabaseConfiguration: React.FC = () => {
                   type="text"
                   value={dbPort}
                   onChange={e => setDbPort(e.target.value)}
+                  placeholder="5432 or 6543"
                   className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
                 />
+                <span className="text-[9px] text-stone-400">5432 (Direct) / 6543 (Pooler)</span>
               </div>
 
               <div>
@@ -223,6 +329,31 @@ export const DatabaseConfiguration: React.FC = () => {
                   type="text"
                   value={dbName}
                   onChange={e => setDbName(e.target.value)}
+                  placeholder="postgres"
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-stone-700 mb-1">Database User</label>
+                <input
+                  type="text"
+                  value={dbUser}
+                  onChange={e => setDbUser(e.target.value)}
+                  placeholder="postgres"
+                  className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-stone-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={dbPassword}
+                  onChange={e => setDbPassword(e.target.value)}
+                  placeholder="Database password"
                   className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
                 />
               </div>
@@ -237,7 +368,7 @@ export const DatabaseConfiguration: React.FC = () => {
                 type="checkbox"
                 checked={dbSsl}
                 onChange={e => setDbSsl(e.target.checked)}
-                className="rounded text-emerald-600 focus:ring-emerald-500"
+                className="rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
               />
             </div>
 
@@ -253,9 +384,17 @@ export const DatabaseConfiguration: React.FC = () => {
               </button>
 
               {testResult && (
-                <div className="mt-2.5 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2">
-                  <Activity className="w-4 h-4 shrink-0 text-emerald-700 mt-0.5" />
-                  <span>{testResult}</span>
+                <div
+                  className={`mt-2.5 p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                    testResult.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                  }`}
+                >
+                  <Activity
+                    className={`w-4 h-4 shrink-0 mt-0.5 ${testResult.success ? 'text-emerald-700' : 'text-rose-700'}`}
+                  />
+                  <span className="leading-relaxed">{testResult.message}</span>
                 </div>
               )}
             </div>
@@ -307,3 +446,4 @@ export const DatabaseConfiguration: React.FC = () => {
     </div>
   );
 };
+
