@@ -70,6 +70,8 @@ export interface OfficialLogoItem {
   mobileVisible?: boolean;
   variant?: 'light' | 'dark' | 'color';
   order: number;
+  showInHero?: boolean;
+  label?: string;
 }
 
 export interface NavItem {
@@ -199,7 +201,7 @@ export interface AnnouncementBarConfig {
   bgColor: string;
   textColor: string;
   position: 'top' | 'below_header' | 'above_hero';
-  isDismissible: boolean;
+  isDismissible?: boolean;
 }
 
 export interface FooterColumnLink {
@@ -230,8 +232,9 @@ export interface ThemeConfig {
   primaryColor: string;
   secondaryColor: string;
   accentColor: string;
-  bgColor: string;
+  bgColor?: string;
   backgroundColor?: string;
+  colorMode?: string;
   textColor: string;
   headingColor: string;
   buttonColor: string;
@@ -239,12 +242,13 @@ export interface ThemeConfig {
   borderColor: string;
   headingFont: string;
   bodyFont: string;
-  fontSize: 'small' | 'medium' | 'large';
-  headingSize: 'normal' | 'large' | 'extralarge';
-  buttonSize: 'small' | 'medium' | 'large';
-  appearance: 'light' | 'dark' | 'auto';
-  borderRadius: 'none' | 'small' | 'medium' | 'large' | 'full';
-  shadowLevel: 'none' | 'soft' | 'medium' | 'strong';
+  fontSize?: 'small' | 'medium' | 'large' | string;
+  baseFontSize?: string;
+  headingSize?: 'normal' | 'large' | 'extralarge' | string;
+  buttonSize?: 'small' | 'medium' | 'large' | string;
+  appearance?: 'light' | 'dark' | 'auto' | string;
+  borderRadius?: 'none' | 'small' | 'medium' | 'large' | 'full' | string;
+  shadowLevel?: 'none' | 'soft' | 'medium' | 'strong' | string;
   shadowDepth?: string;
 }
 
@@ -442,6 +446,14 @@ export interface LandingCmsConfig {
   officeHours: string;
   hotlineEmergency: string;
   mapImageUrl: string;
+  contactMobile?: string;
+
+  aboutSubtitle?: string;
+  statsEnabled?: boolean;
+  statSwineCount?: string;
+  statMarketReadyCount?: string;
+  statBarangayCount?: string;
+  statFarmerCount?: string;
 
   // Footer Management
   footerLogoUrl: string;

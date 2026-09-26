@@ -30,7 +30,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({
   const [selectedRecipient, setSelectedRecipient] = useState<string>('all'); // 'all' or specific barangay
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [priority, setPriority] = useState<MessageItem['priority']>('routine');
+  const [priority, setPriority] = useState<MessageItem['priority']>('normal');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMessage, setSelectedMessage] = useState<MessageItem | null>(messages[0] || null);
 
@@ -256,7 +256,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({
                           className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                             msg.priority === 'urgent'
                               ? 'bg-red-100 text-red-800'
-                              : msg.priority === 'alert'
+                              : msg.priority === 'advisory'
                               ? 'bg-amber-100 text-amber-800'
                               : 'bg-stone-100 text-stone-700'
                           }`}
@@ -298,7 +298,7 @@ export const MessagingCenter: React.FC<MessagingCenterProps> = ({
                     className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
                       selectedMessage.priority === 'urgent'
                         ? 'bg-red-100 text-red-800'
-                        : selectedMessage.priority === 'alert'
+                        : selectedMessage.priority === 'advisory'
                         ? 'bg-amber-100 text-amber-800'
                         : 'bg-stone-100 text-stone-700'
                     }`}

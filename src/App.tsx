@@ -1,45 +1,54 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { Header } from './components/common/Header';
 import { Sidebar } from './components/common/Sidebar';
 import { OfflineBanner } from './components/common/OfflineBanner';
 import { BackupModal } from './components/common/BackupModal';
-import { LandingPage } from './components/landing/LandingPage';
-import { Dashboard } from './components/dashboard/Dashboard';
-import { GisMap } from './components/gis/GisMap';
-import { SwineForm } from './components/registry/SwineForm';
-import { BatchImportModal } from './components/registry/BatchImportModal';
-import { PigsRecords } from './components/records/PigsRecords';
-import { CertificateManager } from './components/certificate/CertificateManager';
-import { MessagingCenter } from './components/messaging/MessagingCenter';
-import { ManageBarangays } from './components/admin/ManageBarangays';
-import { ManageAccounts } from './components/admin/ManageAccounts';
-import { ManageLandingPage } from './components/admin/ManageLandingPage';
-import { ManageRegistryForms } from './components/admin/ManageRegistryForms';
-import { BarangayBiosecurity } from './components/admin/BarangayBiosecurity';
-import { PhotoMediaSettings } from './components/admin/media/PhotoMediaSettings';
-import { LogoConfiguration } from './components/admin/media/LogoConfiguration';
-import { InterfaceBackgroundConfig } from './components/admin/media/InterfaceBackgroundConfig';
-import { AccessDenied403 } from './components/admin/media/AccessDenied403';
-import { SidebarColorConfig } from './components/admin/SidebarColorConfig';
-import { RegistryFormCustomizer } from './components/admin/RegistryFormCustomizer';
-import { SwineMarketingAlerts } from './components/marketing/SwineMarketingAlerts';
-import { SwineTakeoffManager } from './components/takeoff/SwineTakeoffManager';
-import { AgentCatalog } from './components/agent/AgentCatalog';
-import { AgentAccountView } from './components/agent/AgentAccountView';
-import { UserAccountView } from './components/account/UserAccountView';
 import { AuthModal } from './components/auth/AuthModal';
 import { SuperAdminAuth } from './components/auth/SuperAdminAuth';
-import { ApiConfiguration } from './components/admin/ApiConfiguration';
-import { DatabaseConfiguration } from './components/admin/DatabaseConfiguration';
+import { AccessDenied403 } from './components/admin/media/AccessDenied403';
 import { hasPermission, isSuperAdminOnlyTab } from './utils/rbacPermissions';
-import { ASFOrdinanceModule } from './components/asf/ASFOrdinanceModule';
-import { BiosecurityAssistant } from './components/assistant/BiosecurityAssistant';
 import { storageService } from './services/storageService';
 import { landingCmsService } from './services/landingCmsService';
 import { BackgroundPhotoConfig } from './types/landingCms';
 import { Barangay, LandingPageConfig, SwineRecord, UserAccount, UserRole } from './types';
-import { MasterConfigHub } from './components/admin/MasterConfigHub';
 import { useRoleTheme } from './hooks/useRoleTheme';
+
+// Route-level code-splitting for large modules & GIS/Export libraries
+const LandingPage = lazy(() => import('./components/landing/LandingPage').then(m => ({ default: m.LandingPage })));
+const Dashboard = lazy(() => import('./components/dashboard/Dashboard').then(m => ({ default: m.Dashboard })));
+const GisMap = lazy(() => import('./components/gis/GisMap').then(m => ({ default: m.GisMap })));
+const SwineForm = lazy(() => import('./components/registry/SwineForm').then(m => ({ default: m.SwineForm })));
+const BatchImportModal = lazy(() => import('./components/registry/BatchImportModal').then(m => ({ default: m.BatchImportModal })));
+const PigsRecords = lazy(() => import('./components/records/PigsRecords').then(m => ({ default: m.PigsRecords })));
+const CertificateManager = lazy(() => import('./components/certificate/CertificateManager').then(m => ({ default: m.CertificateManager })));
+const MessagingCenter = lazy(() => import('./components/messaging/MessagingCenter').then(m => ({ default: m.MessagingCenter })));
+const ManageBarangays = lazy(() => import('./components/admin/ManageBarangays').then(m => ({ default: m.ManageBarangays })));
+const ManageAccounts = lazy(() => import('./components/admin/ManageAccounts').then(m => ({ default: m.ManageAccounts })));
+const ManageLandingPage = lazy(() => import('./components/admin/ManageLandingPage').then(m => ({ default: m.ManageLandingPage })));
+const ManageRegistryForms = lazy(() => import('./components/admin/ManageRegistryForms').then(m => ({ default: m.ManageRegistryForms })));
+const BarangayBiosecurity = lazy(() => import('./components/admin/BarangayBiosecurity').then(m => ({ default: m.BarangayBiosecurity })));
+const PhotoMediaSettings = lazy(() => import('./components/admin/media/PhotoMediaSettings').then(m => ({ default: m.PhotoMediaSettings })));
+const LogoConfiguration = lazy(() => import('./components/admin/media/LogoConfiguration').then(m => ({ default: m.LogoConfiguration })));
+const InterfaceBackgroundConfig = lazy(() => import('./components/admin/media/InterfaceBackgroundConfig').then(m => ({ default: m.InterfaceBackgroundConfig })));
+const SidebarColorConfig = lazy(() => import('./components/admin/SidebarColorConfig').then(m => ({ default: m.SidebarColorConfig })));
+const RegistryFormCustomizer = lazy(() => import('./components/admin/RegistryFormCustomizer').then(m => ({ default: m.RegistryFormCustomizer })));
+const SwineMarketingAlerts = lazy(() => import('./components/marketing/SwineMarketingAlerts').then(m => ({ default: m.SwineMarketingAlerts })));
+const SwineTakeoffManager = lazy(() => import('./components/takeoff/SwineTakeoffManager').then(m => ({ default: m.SwineTakeoffManager })));
+const AgentCatalog = lazy(() => import('./components/agent/AgentCatalog').then(m => ({ default: m.AgentCatalog })));
+const AgentAccountView = lazy(() => import('./components/agent/AgentAccountView').then(m => ({ default: m.AgentAccountView })));
+const UserAccountView = lazy(() => import('./components/account/UserAccountView').then(m => ({ default: m.UserAccountView })));
+const ApiConfiguration = lazy(() => import('./components/admin/ApiConfiguration').then(m => ({ default: m.ApiConfiguration })));
+const DatabaseConfiguration = lazy(() => import('./components/admin/DatabaseConfiguration').then(m => ({ default: m.DatabaseConfiguration })));
+const ASFOrdinanceModule = lazy(() => import('./components/asf/ASFOrdinanceModule').then(m => ({ default: m.ASFOrdinanceModule })));
+const BiosecurityAssistant = lazy(() => import('./components/assistant/BiosecurityAssistant').then(m => ({ default: m.BiosecurityAssistant })));
+const MasterConfigHub = lazy(() => import('./components/admin/MasterConfigHub').then(m => ({ default: m.MasterConfigHub })));
+
+const ViewLoader: React.FC = () => (
+  <div className="flex flex-col items-center justify-center min-h-[350px] w-full p-8 text-emerald-800">
+    <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mb-3" />
+    <span className="text-xs font-semibold tracking-wide text-stone-500">Loading module...</span>
+  </div>
+);
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => storageService.getCurrentUser());
@@ -573,7 +582,8 @@ export default function App() {
           }}
           className="flex-1 w-full min-w-0 overflow-y-auto text-stone-900 relative z-10"
         >
-        {currentRole === 'landing' ? (
+          <Suspense fallback={<ViewLoader />}>
+            {currentRole === 'landing' ? (
           <LandingPage
             swineList={swineList}
             barangays={barangays}
@@ -929,20 +939,23 @@ export default function App() {
             )}
           </>
         )}
+          </Suspense>
       </main>
     </div>
 
       {/* Batch Import Modal */}
-      <BatchImportModal
-        isOpen={isBatchModalOpen}
-        onClose={() => setIsBatchModalOpen(false)}
-        barangays={barangays}
-        currentUser={currentUser}
-        onImportComplete={() => {
-          refreshAllData();
-          handleTabSelect('records');
-        }}
-      />
+      <Suspense fallback={null}>
+        <BatchImportModal
+          isOpen={isBatchModalOpen}
+          onClose={() => setIsBatchModalOpen(false)}
+          barangays={barangays}
+          currentUser={currentUser}
+          onImportComplete={() => {
+            refreshAllData();
+            handleTabSelect('records');
+          }}
+        />
+      </Suspense>
 
       {/* Database Backup & Restore Modal */}
       <BackupModal
@@ -965,15 +978,17 @@ export default function App() {
       />
 
       {/* Floating DA Hinunangan Biosecurity Assistant */}
-      <BiosecurityAssistant
-        currentUser={currentUser}
-        currentRole={currentRole}
-        onNavigateTab={handleTabSelect}
-        swineList={swineList}
-        barangays={barangays}
-        onRefresh={refreshAllData}
-        onOpenLogin={() => setIsAuthModalOpen(true)}
-      />
+      <Suspense fallback={null}>
+        <BiosecurityAssistant
+          currentUser={currentUser}
+          currentRole={currentRole}
+          onNavigateTab={handleTabSelect}
+          swineList={swineList}
+          barangays={barangays}
+          onRefresh={refreshAllData}
+          onOpenLogin={() => setIsAuthModalOpen(true)}
+        />
+      </Suspense>
     </div>
   );
 }

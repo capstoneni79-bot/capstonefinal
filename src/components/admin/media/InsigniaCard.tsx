@@ -226,7 +226,9 @@ export const InsigniaCard: React.FC<InsigniaCardProps> = ({
       {/* Top Card Bar */}
       <div className="p-3.5 pb-2 flex items-center justify-between gap-2 border-b border-stone-100 bg-stone-50/50">
         <div className="flex items-center gap-1.5 text-stone-500">
-          <GripVertical className="w-4 h-4 text-stone-400 cursor-grab" title="Insignia Order" />
+          <span title="Insignia Order" className="inline-flex items-center">
+            <GripVertical className="w-4 h-4 text-stone-400 cursor-grab" />
+          </span>
           <span className="font-mono text-[10px] font-bold text-stone-600">#{index + 1}</span>
           <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase tracking-wide bg-stone-200/80 text-stone-700">
             {logo.category || 'Institutional'}

@@ -91,8 +91,14 @@ export interface SwineAgeCalculationResult {
  */
 export function calculateSwineAge(
   birthDateStr: string | undefined | null,
-  referenceDate: Date = new Date()
+  referenceDateInput: Date | string = new Date()
 ): SwineAgeCalculationResult {
+  const referenceDate =
+    typeof referenceDateInput === 'string'
+      ? referenceDateInput.trim()
+        ? new Date(referenceDateInput)
+        : new Date()
+      : referenceDateInput || new Date();
   if (!birthDateStr || typeof birthDateStr !== 'string' || !birthDateStr.trim()) {
     return {
       years: 0,

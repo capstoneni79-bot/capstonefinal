@@ -13,7 +13,7 @@ import {
   Layers,
   HelpCircle,
 } from 'lucide-react';
-import { ASFRegulatoryDocument, LegalArticle, LegalArticleSection } from '../../types';
+import { ASFRegulatoryDocument, LegalArticle, LegalArticleSection, LegalDocumentCategory } from '../../types';
 
 interface LegalDocumentEditModalProps {
   isOpen: boolean;
@@ -38,7 +38,7 @@ export const LegalDocumentEditModal: React.FC<LegalDocumentEditModalProps> = ({
   // Form fields
   const [id, setId] = useState('');
   const [type, setType] = useState<string>('municipal_ordinance');
-  const [category, setCategory] = useState<'ordinance' | 'resolution' | 'national_reference'>('ordinance');
+  const [category, setCategory] = useState<'ordinance' | 'resolution' | 'national_reference' | 'administrative_order' | string>('ordinance');
   const [officialNumber, setOfficialNumber] = useState('');
   const [seriesYear, setSeriesYear] = useState('');
   const [title, setTitle] = useState('');
@@ -254,7 +254,7 @@ export const LegalDocumentEditModal: React.FC<LegalDocumentEditModalProps> = ({
       ...(documentToEdit || {}),
       id,
       type,
-      category,
+      category: category as LegalDocumentCategory,
       title: title.trim(),
       knownAs: knownAs.trim() || undefined,
       officialNumber: officialNumber.trim(),

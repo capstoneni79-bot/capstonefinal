@@ -214,6 +214,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     position: 'center',
     fit: 'cover',
     fixed: true,
+    repeat: 'no-repeat',
   };
 
   const hasBackground = Boolean(bg.imageUrl && bg.enabled !== false);
@@ -1765,8 +1766,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="font-bold text-stone-900 text-xs">
-                            {art.articleNumber ? `Article ${art.articleNumber}: ` : ''}
-                            {art.title}
+                            {(art as any).articleNumber ? `Article ${(art as any).articleNumber}: ` : (art as any).number ? `${(art as any).number}: ` : ''}
+                            {(art as any).title || (art as any).heading || ''}
                           </span>
                           <span
                             className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
@@ -1780,7 +1781,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             {art.mandateCategory}
                           </span>
                         </div>
-                        <p className="text-[11px] text-stone-600 leading-relaxed">{art.content}</p>
+                        <p className="text-[11px] text-stone-600 leading-relaxed">{(art as any).content || (art as any).text || ''}</p>
                       </div>
                     ))}
                   </div>
