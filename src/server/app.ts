@@ -14,7 +14,7 @@ import { getAllUsers, getUserByUsernameOrEmail, upsertUser, deleteUserByUid } fr
 import { getAllMessages, createMessage, markMessageRead, deleteMessageById } from '../db/messages.ts';
 import { getAllMedia, insertMedia, deleteMediaById } from '../db/media.ts';
 import { getSystemSetting, setSystemSetting } from '../db/settings.ts';
-import { initPostgresTables, pool } from '../db/index.ts';
+import { initPostgresTables, pool, testDatabaseConnection, updateDatabaseConnection } from '../db/index.ts';
 import {
   getFullRegistrySchemaFromDb,
   syncFullRegistrySchemaToDb,
@@ -874,6 +874,25 @@ export function createApp() {
         error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
       });
     }
+  });
+
+  // Database configuration test & update endpoints
+  app.post('/api/admin/database/test', async (req, res) => {
+    const { connectionString } = req.body || {};
+    if (!connectionString) {
+      return res.status(400).json({ success: false, error: 'Connection string is required.' });
+    }
+    const result = await testDatabaseConnection(connectionString.trim());
+    return res.json(result);
+  });
+
+  app.post('/api/admin/database/save', async (req, res) => {
+    const { connectionString } = req.body || {};
+    if (!connectionString) {
+      return res.status(400).json({ success: false, error: 'Connection string is required.' });
+    }
+    const result = await updateDatabaseConnection(connectionString.trim());
+    return res.json(result);
   });
 
   // =========================================================================
