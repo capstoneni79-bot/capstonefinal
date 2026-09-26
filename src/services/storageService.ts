@@ -336,11 +336,35 @@ export const storageService = {
 
     // Sync to backend API if reachable
     if (!isOffline && typeof fetch !== 'undefined') {
+      const user = this.getCurrentUser();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (user) {
+        headers['x-user-role'] = user.role || 'focal';
+        headers['x-user-id'] = user.id || '';
+        headers['x-user-name'] = user.username || user.name || '';
+        if (user.assignedBarangay) headers['x-user-assigned-barangay'] = user.assignedBarangay;
+        if (user.barangay_id) headers['x-user-barangay-id'] = user.barangay_id;
+      }
+
       fetch('/api/swine', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(newRecord),
-      }).catch(() => {});
+      })
+        .then(async res => {
+          if (res.ok) {
+            const data = await res.json().catch(() => null);
+            if (data && data.success) {
+              const currentRecords = this.getSwineRecords();
+              const recIndex = currentRecords.findIndex(r => r.id === newRecord.id);
+              if (recIndex !== -1) {
+                currentRecords[recIndex].isSynced = true;
+                this.saveSwineRecords(currentRecords);
+              }
+            }
+          }
+        })
+        .catch(() => {});
     }
 
     if (isOffline) {
@@ -405,11 +429,32 @@ export const storageService = {
       this.saveSwineRecords(records);
 
       if (!isOffline && typeof fetch !== 'undefined') {
-        fetch(`/api/swine/${updated.id}`, {
+        const user = this.getCurrentUser();
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (user) {
+          headers['x-user-role'] = user.role || 'focal';
+          headers['x-user-id'] = user.id || '';
+          headers['x-user-name'] = user.username || user.name || '';
+          if (user.assignedBarangay) headers['x-user-assigned-barangay'] = user.assignedBarangay;
+          if (user.barangay_id) headers['x-user-barangay-id'] = user.barangay_id;
+        }
+
+        fetch(`/api/swine/${encodeURIComponent(updated.id)}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify(records[index]),
-        }).catch(() => {});
+        })
+          .then(async res => {
+            if (res.ok) {
+              const currentRecords = this.getSwineRecords();
+              const recIndex = currentRecords.findIndex(r => r.id === updated.id);
+              if (recIndex !== -1) {
+                currentRecords[recIndex].isSynced = true;
+                this.saveSwineRecords(currentRecords);
+              }
+            }
+          })
+          .catch(() => {});
       }
 
       if (isOffline) {

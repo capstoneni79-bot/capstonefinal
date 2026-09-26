@@ -134,22 +134,35 @@ class OfflineSyncEngine {
     if (this.isCheckingHealth) return this.isBackendReachable;
     this.isCheckingHealth = true;
 
+    const attemptPing = async (timeoutMs: number): Promise<boolean> => {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+        const res = await fetch('/api/health', {
+          method: 'GET',
+          signal: controller.signal,
+          cache: 'no-store',
+        });
+        clearTimeout(timeoutId);
+
+        return res.ok;
+      } catch {
+        return false;
+      }
+    };
+
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
+      // First attempt with 10s timeout (allows for serverless cold start)
+      let ok = await attemptPing(10000);
+      if (!ok && typeof navigator !== 'undefined' && navigator.onLine && !storageService.getSimulatedOffline()) {
+        // Quick retry with 12s timeout
+        await new Promise(r => setTimeout(r, 1200));
+        ok = await attemptPing(12000);
+      }
 
-      const res = await fetch('/api/health', {
-        method: 'GET',
-        signal: controller.signal,
-        cache: 'no-store',
-      });
-      clearTimeout(timeoutId);
-
-      this.isBackendReachable = res.ok;
-      return res.ok;
-    } catch {
-      this.isBackendReachable = false;
-      return false;
+      this.isBackendReachable = ok;
+      return ok;
     } finally {
       this.isCheckingHealth = false;
     }

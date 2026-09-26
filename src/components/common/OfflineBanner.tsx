@@ -56,7 +56,11 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
               <WifiOff className="w-4 h-4 text-amber-200 shrink-0" />
               <span>
                 <strong>{t('offline_banner_active')}</strong>{' '}
-                {isSimulatedOffline ? t('offline_banner_simulated') : t('offline_banner_no_internet')} — {t('offline_banner_desc')}
+                {isSimulatedOffline 
+                  ? t('offline_banner_simulated') 
+                  : (typeof navigator !== 'undefined' && navigator.onLine 
+                      ? '(Connecting to Cloud Database...)' 
+                      : t('offline_banner_no_internet'))} — {t('offline_banner_desc')}
               </span>
             </>
           ) : (
@@ -70,6 +74,19 @@ export const OfflineBanner: React.FC<OfflineBannerProps> = ({ onSyncComplete }) 
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {!isOnline && (
+            <button
+              type="button"
+              onClick={handleSync}
+              disabled={syncing}
+              className="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold px-3 py-1 rounded-md text-xs flex items-center gap-1.5 transition shadow-sm border border-emerald-400/40 cursor-pointer"
+              title="Ping cloud database and synchronize records immediately"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
+              <span>{syncing ? 'Connecting...' : 'Connect to Cloud DB'}</span>
+            </button>
+          )}
+
           {isSimulatedOffline && (
             <button
               type="button"
