@@ -191,7 +191,7 @@ export async function persistLocalDatabase(): Promise<void> {
 }
 
 /**
- * Initializes all required PostgreSQL tables on Supabase/Render/Local if they don't exist.
+ * Initializes all required PostgreSQL tables on Supabase/Local if they don't exist.
  */
 export async function initPostgresTables(): Promise<boolean> {
   try {

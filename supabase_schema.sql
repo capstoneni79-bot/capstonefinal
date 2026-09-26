@@ -1,6 +1,6 @@
 -- ============================================================================
 -- HINUNANGAN SWINE REGISTRY & TRACEABILITY SYSTEM
--- PostgreSQL Schema for Supabase & Render Deployment
+-- PostgreSQL Schema for Supabase Deployment
 -- ============================================================================
 
 -- 1. Enable UUID extension if desired
