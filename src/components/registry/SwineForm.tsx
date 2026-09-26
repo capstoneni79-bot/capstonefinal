@@ -572,8 +572,8 @@ export const SwineForm: React.FC<SwineFormProps> = ({
             }}
             label={field.label}
             required={field.required}
-            placeholder={field.placeholder || '09123456789'}
-            helpText={field.helpText || 'Contact number must contain exactly 11 digits.'}
+            placeholder={field.placeholder || '9123456789'}
+            helpText={field.helpText || 'Contact number must contain exactly 10 digits.'}
             errorOverride={contactError}
           />
         </div>
