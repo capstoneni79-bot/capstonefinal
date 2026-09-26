@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#15803d" />
+      <stop offset="100%" stop-color="#166534" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#facc15" />
+      <stop offset="100%" stop-color="#ca8a04" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="100" fill="url(#bg)" />
+  <!-- Circular seal border -->
+  <circle cx="256" cy="256" r="215" fill="none" stroke="url(#gold)" stroke-width="10" stroke-dasharray="12,6" />
+  <circle cx="256" cy="256" r="195" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.7" />
+  
+  <!-- Stylized Swine & Shield Silhouette -->
+  <g transform="translate(256, 240) scale(1.4)">
+    <!-- Swine profile body -->
+    <path d="M-60,20 C-60,-20 -30,-50 15,-50 C50,-50 75,-30 85,-10 C95,-10 105,0 100,15 C95,25 80,30 70,30 L65,55 L50,55 L52,32 L20,32 L22,55 L7,55 L9,32 L-20,32 L-18,55 L-33,55 L-30,30 C-45,30 -58,26 -60,20 Z" fill="#ffffff" />
+    <!-- Ear -->
+    <path d="M30,-45 C35,-65 50,-65 48,-42 Z" fill="#facc15" />
+    <!-- Eye & snout detail -->
+    <circle cx="75" cy="-8" r="4" fill="#15803d" />
+    <ellipse cx="94" cy="5" rx="5" ry="8" fill="#e2e8f0" />
+    <circle cx="93" cy="3" r="1.5" fill="#15803d" />
+    <circle cx="93" cy="7" r="1.5" fill="#15803d" />
+    <!-- Tail spiral -->
+    <path d="M-60,5 Q-75,-5 -70,-15 Q-65,-22 -72,-25" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" />
+  </g>
+  
+  <!-- Ribbon / Banner banner with text -->
+  <path d="M90,390 L422,390 L395,430 L117,430 Z" fill="url(#gold)" />
+  <text x="256" y="418" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="900" fill="#14532d" text-anchor="middle" letter-spacing="3">DA HINUNANGAN</text>
+  <text x="256" y="115" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="800" fill="#ffffff" text-anchor="middle" letter-spacing="4">SWINE REGISTRY</text>
+</svg>

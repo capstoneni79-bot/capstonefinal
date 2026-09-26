@@ -1,0 +1,6 @@
+{
+  "name": "DA Hinunangan Swine Registry",
+  "description": "Department of Agriculture Swine Registry and Monitoring System for Hinunangan, Southern Leyte with offline capabilities, GIS mapping, biosecurity tracking, and certificate issuance.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
