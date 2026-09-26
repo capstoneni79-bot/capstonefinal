@@ -2187,7 +2187,7 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-    // Strict Contact Number Validation: exactly 11 digits only
+    // Strict Contact Number Validation: exactly 10 digits only
     const contactReq = getField('fld_contact_phone')?.required ?? true;
     if (contactReq || farmerContact.trim()) {
       if (!isValidContactNumber(farmerContact)) {
