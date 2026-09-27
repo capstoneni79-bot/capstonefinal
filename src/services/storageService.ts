@@ -332,9 +332,16 @@ export const storageService = {
 
   async saveSwineRecordCloud(record: SwineRecord, isEdit: boolean = false): Promise<SwineRecord> {
     const contactDigits = (record.farmerContact || '').replace(/\D/g, '');
-    if (!record.farmerContact || typeof record.farmerContact !== 'string' || !(contactDigits.length === 10 || contactDigits.length === 11 || contactDigits.length === 12)) {
-      throw new Error('Contact number must be a valid Philippine mobile number (11 digits, e.g. 09171234567).');
-    }
+if (
+  !record.farmerContact ||
+  typeof record.farmerContact !== 'string' ||
+  contactDigits.length !== 10 ||
+  !contactDigits.startsWith('9')
+) {
+  throw new Error(
+    'Contact number must contain exactly 10 digits after +63 (e.g. 9171234567).'
+  );
+}
 
     const records = this.getSwineRecords();
     const pigIdTag = (record.pigIdTag || record.earTagNo || '').trim();
