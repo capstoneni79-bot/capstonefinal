@@ -23,8 +23,10 @@ export interface ContactNumberInputProps {
  */
 export const isValidContactNumber = (val: string): boolean => {
   if (!val) return false;
-  const contactDigits = val.replace(/\D/g, '');
-  return contactDigits.length === 10 && /^9\d{9}$/.test(contactDigits);
+  const digits = (val || '').replace(/\D/g, '');
+  const cleaned = digits.startsWith('63') ? digits.slice(2) : digits;
+  const normalized = cleaned.startsWith('0') ? cleaned.slice(1) : cleaned;
+  return normalized.length === 10 && /^9\d{9}$/.test(normalized);
 };
 
 export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
@@ -48,8 +50,9 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
   // Display only local digits when editing an existing canonical +63 value.
   const getDisplayDigits = (raw: string) => {
     const digits = (raw || '').replace(/\D/g, '');
-    const localDigits = digits.length === 12 && digits.startsWith('63') ? digits.slice(2) : digits;
-    return localDigits.slice(0, 10);
+    const withoutCountry = digits.startsWith('63') ? digits.slice(2) : digits;
+    const withoutZero = withoutCountry.startsWith('0') ? withoutCountry.slice(1) : withoutCountry;
+    return withoutZero.slice(0, 10);
   };
 
   const currentDigits = getDisplayDigits(value);
@@ -110,9 +113,8 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
 
     const pastedText = e.clipboardData.getData('text') || '';
     let digits = pastedText.replace(/\D/g, '');
-    if (digits.length === 12 && digits.startsWith('63')) {
-      digits = digits.slice(2);
-    }
+    if (digits.startsWith('63')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = digits.slice(1);
     const clean10 = digits.slice(0, 10);
     onChange(clean10);
 
@@ -124,7 +126,10 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const clean10 = e.target.value.replace(/\D/g, '').slice(0, 10);
+    let digits = e.target.value.replace(/\D/g, '');
+    if (digits.startsWith('63')) digits = digits.slice(2);
+    if (digits.startsWith('0')) digits = digits.slice(1);
+    const clean10 = digits.slice(0, 10);
     onChange(clean10);
 
     if (touched) {

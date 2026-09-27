@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Lock,
   User,
@@ -15,6 +15,7 @@ import {
 import { UserAccount, UserRole } from '../../types';
 import { storageService } from '../../services/storageService';
 import { useOfficialLogos } from '../common/OfficialSeals';
+import { supabase } from '../../lib/supabase';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -35,6 +36,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [dbConnectionStatus, setDbConnectionStatus] = useState<'connected' | 'disconnected'>('disconnected');
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkConnection = async () => {
+      try {
+        if (!supabase) {
+          throw new Error('Supabase client is not configured');
+        }
+
+        const timeout = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Database timeout')), 4000);
+        });
+
+        const sessionPromise = supabase.auth.getSession();
+        const { error: sessionError } = await Promise.race([sessionPromise, timeout]);
+        if (sessionError) throw sessionError;
+
+        const { error: queryError } = await Promise.race([
+          supabase.from('barangays').select('id', { count: 'exact', head: true }).limit(1),
+          timeout,
+        ]);
+        if (queryError) throw queryError;
+
+        if (isMounted) setDbConnectionStatus('connected');
+      } catch {
+        if (isMounted) setDbConnectionStatus('disconnected');
+      }
+    };
+
+    checkConnection();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const logos = useOfficialLogos();
   const authLogo =
@@ -206,6 +243,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {/* Form Body */}
         <div className="p-6 space-y-5">
+          <div className="absolute bottom-3 right-3 flex items-center gap-2 rounded-full border bg-white/90 px-2 py-1 text-[10px] font-semibold shadow-sm backdrop-blur-sm">
+            <span className={`h-2.5 w-2.5 rounded-full ${dbConnectionStatus === 'connected' ? 'bg-emerald-500' : 'bg-red-500'} shadow-sm`} />
+            <span className={dbConnectionStatus === 'connected' ? 'text-emerald-700' : 'text-red-700'}>
+              {dbConnectionStatus === 'connected' ? 'Connected to Database' : 'Database Disconnected'}
+            </span>
+          </div>
           {/* Error Banner */}
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2 animate-in fade-in">

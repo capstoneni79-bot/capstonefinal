@@ -191,26 +191,39 @@ export function getFieldValue(record: SwineRecord, field: RegistryFormField): an
 /** Extracts the ten local digits from local or canonical Philippine mobile numbers. */
 export function getPhilippineLocalContactDigits(val: string | null | undefined): string {
   if (!val) return '';
-  const contactDigits = String(val).replace(/\D/g, '');
-  if (contactDigits.length === 10) return contactDigits;
-  if (contactDigits.length === 12 && contactDigits.startsWith('63')) return contactDigits.slice(2);
+  const digits = String(val).replace(/\D/g, '');
+  if (!digits) return '';
+
+  let localDigits = digits;
+  if (digits.startsWith('63') && digits.length === 12) {
+    localDigits = digits.slice(2);
+  }
+  if (localDigits.startsWith('0')) {
+    localDigits = localDigits.slice(1);
+  }
+  if (localDigits.length === 10) return localDigits;
   return '';
+}
+
+export function sanitizePhilippinePhoneNumber(val: string | null | undefined): string {
+  const digits = getPhilippineLocalContactDigits(val);
+  if (digits.length !== 10 || !/^9\d{9}$/.test(digits)) return '';
+  return digits;
 }
 
 /** Normalizes a valid Philippine mobile number to canonical '+63 9XX XXX XXXX'. */
 export function normalizePhilippinePhoneNumber(val: string | null | undefined): string {
-  if (!val) return '';
-  const contactDigits = getPhilippineLocalContactDigits(val);
-  if (contactDigits.length !== 10 || !/^9\d{9}$/.test(contactDigits)) return '';
-  return `+63 ${contactDigits.slice(0, 3)} ${contactDigits.slice(3, 6)} ${contactDigits.slice(6)}`;
+  const digits = sanitizePhilippinePhoneNumber(val);
+  if (!digits) return '';
+  return `+63 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
 }
 
 /**
  * Validates if the phone number is a valid 10-digit Philippine mobile number
  */
 export function isValidPhilippinePhoneNumber(val: string | null | undefined): boolean {
-  const contactDigits = getPhilippineLocalContactDigits(val);
-  return contactDigits.length === 10 && /^9\d{9}$/.test(contactDigits);
+  const digits = sanitizePhilippinePhoneNumber(val);
+  return digits.length === 10 && /^9\d{9}$/.test(digits);
 }
 
 /**

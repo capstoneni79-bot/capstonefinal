@@ -9,15 +9,63 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS postgis;
 
 -- ============================================================
--- Safety fix for existing projects that previously used TEXT ids
--- Make sure every foreign key to swine_records(id) matches UUID.
+-- Safety fixes for legacy databases created before the UUID-based schema
 -- ============================================================
 DO $$
 BEGIN
+    -- Convert legacy integer public.users.id to UUID so it matches auth.users.id
     IF EXISTS (
         SELECT 1
         FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'swine_records'
+        WHERE table_schema = 'public' AND table_name = 'users'
+    ) THEN
+        IF EXISTS (
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'users'
+              AND column_name = 'id'
+              AND data_type IN ('integer', 'bigint', 'smallint')
+        ) THEN
+            ALTER TABLE public.users ALTER COLUMN id DROP DEFAULT;
+            ALTER TABLE public.users
+                ALTER COLUMN id TYPE UUID USING gen_random_uuid();
+        END IF;
+    END IF;
+
+    -- Fix legacy user references in downstream tables only when those columns exist
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'certificates' AND column_name = 'generated_by'
+    ) THEN
+        ALTER TABLE public.certificates
+            ALTER COLUMN generated_by TYPE UUID USING generated_by::uuid;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'user_id'
+    ) THEN
+        ALTER TABLE public.audit_logs
+            ALTER COLUMN user_id TYPE UUID USING user_id::uuid;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'system_settings' AND column_name = 'updated_by'
+    ) THEN
+        ALTER TABLE public.system_settings
+            ALTER COLUMN updated_by TYPE UUID USING updated_by::uuid;
+    END IF;
+
+    -- Fix any old swine id datatype mismatches
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'swine_records' AND column_name = 'id'
     ) THEN
         IF EXISTS (
             SELECT 1
@@ -31,14 +79,11 @@ BEGIN
                 ALTER COLUMN id TYPE UUID USING id::uuid;
         END IF;
     END IF;
-END $$;
 
-DO $$
-BEGIN
     IF EXISTS (
         SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'certificates'
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'certificates' AND column_name = 'swine_id'
     ) THEN
         ALTER TABLE public.certificates
             ALTER COLUMN swine_id TYPE UUID USING swine_id::uuid;
@@ -46,8 +91,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'monitoring_records'
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'monitoring_records' AND column_name = 'swine_id'
     ) THEN
         ALTER TABLE public.monitoring_records
             ALTER COLUMN swine_id TYPE UUID USING swine_id::uuid;
@@ -55,8 +100,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'swine_movements'
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'swine_movements' AND column_name = 'swine_id'
     ) THEN
         ALTER TABLE public.swine_movements
             ALTER COLUMN swine_id TYPE UUID USING swine_id::uuid;
@@ -64,8 +109,8 @@ BEGIN
 
     IF EXISTS (
         SELECT 1
-        FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = 'mortality_records'
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'mortality_records' AND column_name = 'swine_id'
     ) THEN
         ALTER TABLE public.mortality_records
             ALTER COLUMN swine_id TYPE UUID USING swine_id::uuid;
@@ -133,6 +178,42 @@ CREATE TABLE IF NOT EXISTS public.users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'users'
+    ) THEN
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS role_id UUID;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS assigned_barangay_id UUID;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS full_name TEXT;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS phone_number TEXT;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+        ALTER TABLE public.users
+            ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+    END IF;
+END $$;
+
 -- ============================================================
 -- 2. Farmers and swine records
 -- ============================================================
@@ -156,6 +237,57 @@ CREATE TABLE IF NOT EXISTS public.farmers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'farmers'
+    ) THEN
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS barangay_id UUID;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS first_name TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS middle_name TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS last_name TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS suffix TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS farm_name TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS farm_address TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS contact_number TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS email TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS gender TEXT;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS birth_date DATE;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false;
+
+        ALTER TABLE public.farmers
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.swine_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -181,10 +313,88 @@ CREATE TABLE IF NOT EXISTS public.swine_records (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     location_lat DOUBLE PRECISION,
     location_lng DOUBLE PRECISION,
-    geom GEOMETRY(POINT, 4326),
+    geojson JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'swine_records'
+    ) THEN
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS barangay_id UUID;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS farmer_id UUID;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS original_tag_number TEXT;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS ear_tag_number TEXT;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS pig_name TEXT;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS breed TEXT;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS sex TEXT;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS birth_date DATE;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS age_days INTEGER;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS age_months INTEGER;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS swine_type TEXT DEFAULT 'fattening';
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS farm_scale TEXT DEFAULT 'backyard';
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS asf_zone TEXT DEFAULT 'red';
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS weight_kg NUMERIC(10,2);
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS price_estimate NUMERIC(12,2);
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS photo_url TEXT;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT false;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS location_lat DOUBLE PRECISION;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS location_lng DOUBLE PRECISION;
+
+        ALTER TABLE public.swine_records
+            ADD COLUMN IF NOT EXISTS geojson JSONB NOT NULL DEFAULT '{}'::jsonb;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.registry_forms (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -214,6 +424,20 @@ CREATE TABLE IF NOT EXISTS public.registry_fields (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (form_id, field_key)
+);
+
+CREATE TABLE IF NOT EXISTS public.registry_form_fields (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    field_name TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    input_type TEXT NOT NULL DEFAULT 'text',
+    is_required BOOLEAN NOT NULL DEFAULT false,
+    options_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+    display_order INTEGER NOT NULL DEFAULT 0,
+    entity_type TEXT NOT NULL DEFAULT 'swine',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS public.registry_field_values (
@@ -357,7 +581,6 @@ CREATE TABLE IF NOT EXISTS public.gis_features (
     name TEXT,
     description TEXT,
     geojson JSONB NOT NULL DEFAULT '{}'::jsonb,
-    geom GEOMETRY(Geometry, 4326),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -430,23 +653,145 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
 -- ============================================================
 
 CREATE INDEX IF NOT EXISTS idx_barangays_code ON public.barangays(code);
-CREATE INDEX IF NOT EXISTS idx_users_role_id ON public.users(role_id);
-CREATE INDEX IF NOT EXISTS idx_users_assigned_barangay_id ON public.users(assigned_barangay_id);
-CREATE INDEX IF NOT EXISTS idx_farmers_barangay_id ON public.farmers(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_swine_barangay_id ON public.swine_records(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_swine_farmer_id ON public.swine_records(farmer_id);
-CREATE INDEX IF NOT EXISTS idx_swine_status ON public.swine_records(status);
-CREATE INDEX IF NOT EXISTS idx_registry_fields_form_id ON public.registry_fields(form_id);
-CREATE INDEX IF NOT EXISTS idx_registry_field_values_entity ON public.registry_field_values(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_certificates_barangay_id ON public.certificates(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_certificate_templates_barangay_id ON public.certificate_templates(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_monitoring_records_barangay_id ON public.monitoring_records(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_monitoring_photos_monitoring_id ON public.monitoring_photos(monitoring_id);
-CREATE INDEX IF NOT EXISTS idx_gis_features_barangay_id ON public.gis_features(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_swine_movements_barangay_id ON public.swine_movements(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_mortality_records_barangay_id ON public.mortality_records(barangay_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record ON public.audit_logs(table_name, record_id);
-CREATE INDEX IF NOT EXISTS idx_system_settings_group ON public.system_settings(setting_group);
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'role_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_users_role_id ON public.users(role_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'assigned_barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_users_assigned_barangay_id ON public.users(assigned_barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'farmers' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_farmers_barangay_id ON public.farmers(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'swine_records' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_swine_barangay_id ON public.swine_records(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'swine_records' AND column_name = 'farmer_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_swine_farmer_id ON public.swine_records(farmer_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'swine_records' AND column_name = 'status'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_swine_status ON public.swine_records(status);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'registry_fields' AND column_name = 'form_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_registry_fields_form_id ON public.registry_fields(form_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'registry_field_values' AND column_name = 'entity_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_registry_field_values_entity ON public.registry_field_values(entity_type, entity_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'certificates' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_certificates_barangay_id ON public.certificates(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'certificate_templates' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_certificate_templates_barangay_id ON public.certificate_templates(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'monitoring_records' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_monitoring_records_barangay_id ON public.monitoring_records(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'monitoring_photos' AND column_name = 'monitoring_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_monitoring_photos_monitoring_id ON public.monitoring_photos(monitoring_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'gis_features' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_gis_features_barangay_id ON public.gis_features(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'swine_movements' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_swine_movements_barangay_id ON public.swine_movements(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'mortality_records' AND column_name = 'barangay_id'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_mortality_records_barangay_id ON public.mortality_records(barangay_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'table_name'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_audit_logs_table_record ON public.audit_logs(table_name, record_id);
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'system_settings' AND column_name = 'setting_group'
+    ) THEN
+        CREATE INDEX IF NOT EXISTS idx_system_settings_group ON public.system_settings(setting_group);
+    END IF;
+END $$;
 
 -- ============================================================
 -- 7. Updated_at helpers
@@ -980,19 +1325,42 @@ TO authenticated
 USING (public.is_super_admin())
 WITH CHECK (public.is_super_admin());
 
-CREATE POLICY "audit_logs_barangay_scope"
-ON public.audit_logs
-FOR ALL
-TO authenticated
-USING (
-    user_id = auth.uid()
-    OR public.user_can_access_barangay(barangay_id)
-)
-WITH CHECK (
-    public.is_super_admin()
-    OR user_id = auth.uid()
-    OR public.user_can_access_barangay(barangay_id)
-);
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'audit_logs' AND column_name = 'barangay_id'
+    ) THEN
+        DROP POLICY IF EXISTS "audit_logs_barangay_scope" ON public.audit_logs;
+        CREATE POLICY "audit_logs_barangay_scope"
+        ON public.audit_logs
+        FOR ALL
+        TO authenticated
+        USING (
+            user_id = auth.uid()
+            OR public.user_can_access_barangay(barangay_id)
+        )
+        WITH CHECK (
+            public.is_super_admin()
+            OR user_id = auth.uid()
+            OR public.user_can_access_barangay(barangay_id)
+        );
+    ELSE
+        DROP POLICY IF EXISTS "audit_logs_barangay_scope" ON public.audit_logs;
+        CREATE POLICY "audit_logs_barangay_scope"
+        ON public.audit_logs
+        FOR ALL
+        TO authenticated
+        USING (
+            user_id = auth.uid()
+        )
+        WITH CHECK (
+            public.is_super_admin()
+            OR user_id = auth.uid()
+        );
+    END IF;
+END $$;
 
 -- system_settings
 CREATE POLICY "system_settings_select_authenticated"
