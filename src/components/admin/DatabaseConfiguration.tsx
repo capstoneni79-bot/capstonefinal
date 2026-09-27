@@ -21,9 +21,7 @@ import {
 import { storageService } from '../../services/storageService';
 
 export const DatabaseConfiguration: React.FC = () => {
-  const [connectionString, setConnectionString] = useState(() => {
-    return localStorage.getItem('da_db_url') || '';
-  });
+  const [connectionString, setConnectionString] = useState('');
   const [dbHost, setDbHost] = useState(() => {
     return localStorage.getItem('da_db_host') || 'db.wuxivpxsnixabfvlunvg.supabase.co';
   });
@@ -36,9 +34,7 @@ export const DatabaseConfiguration: React.FC = () => {
   const [dbUser, setDbUser] = useState(() => {
     return localStorage.getItem('da_db_user') || 'postgres';
   });
-  const [dbPassword, setDbPassword] = useState(() => {
-    return localStorage.getItem('da_db_password') || '';
-  });
+  const [dbPassword, setDbPassword] = useState('');
   const [dbSsl, setDbSsl] = useState(() => {
     return localStorage.getItem('da_db_ssl') !== 'false';
   });
@@ -60,10 +56,13 @@ export const DatabaseConfiguration: React.FC = () => {
   });
 
   const [isTesting, setIsTesting] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSaved, setIsSaved] = useState(false);
 
   useEffect(() => {
+    localStorage.removeItem('da_db_url');
+    localStorage.removeItem('da_db_password');
     const swine = storageService.getSwineRecords();
     const accounts = storageService.getAccounts();
     const certs = storageService.getIssuedCertificates();
@@ -160,14 +159,9 @@ export const DatabaseConfiguration: React.FC = () => {
 
   const handleSave = async () => {
     const uriToSave = getEffectiveUri();
-    localStorage.setItem('da_db_url', uriToSave);
-    localStorage.setItem('da_db_host', dbHost);
-    localStorage.setItem('da_db_port', dbPort);
-    localStorage.setItem('da_db_name', dbName);
-    localStorage.setItem('da_db_user', dbUser);
-    localStorage.setItem('da_db_password', dbPassword);
-    localStorage.setItem('da_db_ssl', String(dbSsl));
-
+    setIsSaving(true);
+    setIsSaved(false);
+    setTestResult(null);
     try {
       const res = await fetch('/api/admin/database/save', {
         method: 'POST',
@@ -175,16 +169,22 @@ export const DatabaseConfiguration: React.FC = () => {
         body: JSON.stringify({ connectionString: uriToSave }),
       });
       const data = await res.json().catch(() => null);
-      if (data && data.success) {
-        setIsSaved(true);
-        setTimeout(() => setIsSaved(false), 3000);
-      } else {
-        setIsSaved(true);
-        setTimeout(() => setIsSaved(false), 3000);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.message || data?.error || `Server returned status ${res.status}.`);
       }
-    } catch {
       setIsSaved(true);
       setTimeout(() => setIsSaved(false), 3000);
+      setTestResult({
+        success: true,
+        message: 'Connection switched for this running server instance only. For persistent Vercel production access, set DATABASE_URL in Project Settings > Environment Variables and redeploy.',
+      });
+    } catch (err: any) {
+      setTestResult({
+        success: false,
+        message: err?.message || 'Could not save the database connection.',
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -230,10 +230,11 @@ export const DatabaseConfiguration: React.FC = () => {
           <div className="flex items-center gap-2 self-start sm:self-center">
             <button
               onClick={handleSave}
-              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer"
+              disabled={isSaving}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold text-xs shadow-md transition flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
             >
-              {isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-              <span>{isSaved ? 'Settings Saved' : 'Save Changes'}</span>
+              {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : isSaved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+              <span>{isSaving ? 'Saving...' : isSaved ? 'Connection Updated' : 'Save Changes'}</span>
             </button>
           </div>
         </div>

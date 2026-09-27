@@ -38,6 +38,27 @@ export function createApp() {
       : undefined;
   };
 
+  const getDatabaseErrorKind = (error: any): string => {
+    const causes: any[] = [];
+    let current = error;
+    while (current && causes.length < 4) {
+      causes.push(current);
+      current = current.cause;
+    }
+
+    const codes = causes.map(cause => String(cause.code || '')).join(' ');
+    const messages = causes.map(cause => String(cause.message || '')).join(' ').toLowerCase();
+    if (/28P01|28000/.test(codes)) return 'authentication_failed';
+    if (/ENOTFOUND|EAI_AGAIN/.test(codes)) return 'host_not_found';
+    if (/ECONNREFUSED/.test(codes)) return 'connection_refused';
+    if (/ETIMEDOUT|timeout|timed out/.test(`${codes} ${messages}`)) return 'connection_timeout';
+    if (/ECONNRESET|EHOSTUNREACH/.test(codes)) return 'network_unreachable';
+    if (/certificate|ssl|tls/.test(messages)) return 'tls_error';
+    if (/3D000/.test(codes)) return 'database_not_found';
+    if (/42501/.test(codes)) return 'permission_denied';
+    return 'connection_failed';
+  };
+
   // Non-blocking background table verification
   initPostgresTables().catch(err => {
     console.warn('PostgreSQL table check notice:', err?.message || err);
@@ -50,6 +71,7 @@ export function createApp() {
     let dbStatus = 'disconnected';
     let recordsCount = 0;
     let databaseErrorCode: string | undefined;
+    let databaseErrorKind: string | undefined;
     try {
       const client = await pool.connect();
       dbStatus = 'connected';
@@ -59,12 +81,14 @@ export function createApp() {
       } catch (err: any) {
         dbStatus = 'schema_error';
         databaseErrorCode = getDatabaseErrorCode(err);
+        databaseErrorKind = getDatabaseErrorKind(err);
       } finally {
         client.release();
       }
     } catch (err: any) {
       dbStatus = 'error';
       databaseErrorCode = getDatabaseErrorCode(err);
+      databaseErrorKind = getDatabaseErrorKind(err);
     }
     res.json({
       status: 'ok',
@@ -78,6 +102,7 @@ export function createApp() {
         process.env.SQL_HOST?.trim()
       ),
       ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
+      ...(databaseErrorKind ? { database_error_kind: databaseErrorKind } : {}),
       swine_records_count: recordsCount,
       timestamp: new Date().toISOString(),
     });
