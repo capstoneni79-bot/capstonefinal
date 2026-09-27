@@ -31,6 +31,13 @@ import { isValidPhilippinePhoneNumber, normalizePhilippinePhoneNumber } from '..
 export function createApp() {
   const app = express();
 
+  const getDatabaseErrorCode = (error: any): string | undefined => {
+    const code = error?.code || error?.cause?.code;
+    return typeof code === 'string' && /^(?:[0-9A-Z]{5}|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EHOSTUNREACH|ECONNRESET)$/.test(code)
+      ? code
+      : undefined;
+  };
+
   // Non-blocking background table verification
   initPostgresTables().catch(err => {
     console.warn('PostgreSQL table check notice:', err?.message || err);
@@ -42,22 +49,28 @@ export function createApp() {
   app.get(['/health', '/api/health'], async (_req, res) => {
     let dbStatus = 'disconnected';
     let recordsCount = 0;
+    let databaseErrorCode: string | undefined;
     try {
       const client = await pool.connect();
+      dbStatus = 'connected';
       try {
         const countRes = await client.query('SELECT count(*) FROM swine_records');
         recordsCount = parseInt(countRes.rows[0]?.count || '0', 10);
-        dbStatus = 'connected';
+      } catch (err: any) {
+        dbStatus = 'schema_error';
+        databaseErrorCode = getDatabaseErrorCode(err);
       } finally {
         client.release();
       }
-    } catch {
+    } catch (err: any) {
       dbStatus = 'error';
+      databaseErrorCode = getDatabaseErrorCode(err);
     }
     res.json({
       status: 'ok',
       service: 'hinunangan-swine-registry',
       database: dbStatus,
+      ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
       swine_records_count: recordsCount,
       timestamp: new Date().toISOString(),
     });
@@ -433,9 +446,13 @@ export function createApp() {
       return res.status(201).json({ success: true, data: saved, record: saved });
     } catch (err: any) {
       console.error('Error inserting swine record to database:', err);
+      const databaseErrorCode = getDatabaseErrorCode(err);
       return res.status(500).json({
         success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+        error: databaseErrorCode
+          ? `Database save failed (PostgreSQL ${databaseErrorCode}).`
+          : 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+        ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
       });
     }
   };
@@ -512,9 +529,13 @@ export function createApp() {
       return res.json({ success: true, data: saved, record: saved });
     } catch (err: any) {
       console.error('Error updating swine record in database:', err);
+      const databaseErrorCode = getDatabaseErrorCode(err);
       return res.status(500).json({
         success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+        error: databaseErrorCode
+          ? `Database save failed (PostgreSQL ${databaseErrorCode}).`
+          : 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+        ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
       });
     }
   };
