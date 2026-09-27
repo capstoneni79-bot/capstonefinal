@@ -23,11 +23,11 @@ export interface ContactNumberInputProps {
  */
 export const isValidContactNumber = (val: string): boolean => {
   if (!val) return false;
+
   const digits = val.replace(/\D/g, '');
-  if (digits.length === 10 && digits.startsWith('9')) return true;
-  if (digits.length === 11 && digits.startsWith('09')) return true;
-  if (digits.length === 12 && digits.startsWith('639')) return true;
-  return false;
+
+  // STRICT: exactly 10 digits and must start with 9
+  return digits.length === 10 && digits.startsWith('9');
 };
 
 export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
