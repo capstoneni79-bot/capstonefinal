@@ -389,11 +389,19 @@ export const storageService = {
       const endpoint = isEdit ? `/api/swine/${encodeURIComponent(fullRecord.id)}` : '/api/swine';
       const method = isEdit ? 'PUT' : 'POST';
 
-      const res = await fetch(endpoint, {
+      const sendRecord = (farmerContact: string) => fetch(endpoint, {
         method,
         headers,
-        body: JSON.stringify(fullRecord),
+        body: JSON.stringify({ ...fullRecord, farmerContact }),
       });
+
+      let res = await sendRecord(fullRecord.farmerContact);
+      if (!res.ok && contactDigits && fullRecord.farmerContact !== contactDigits) {
+        const errorResponse = await res.clone().json().catch(() => null);
+        if (errorResponse?.field === 'farmerContact') {
+          res = await sendRecord(contactDigits);
+        }
+      }
 
       if (!res.ok) {
         let errMessage = `Cloud database error (HTTP ${res.status})`;
