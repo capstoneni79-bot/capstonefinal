@@ -559,48 +559,53 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       );
     }
 
-    // 2. Primary Farmer Contact Phone
-    if (field.id === 'fld_contact_phone') {
-      return (
-        <div key={field.id}>
-          <ContactNumberInput
-            id={`contact-input-${field.id}`}
-            value={farmerContact}
-           onChange={val => {
-  setFarmerContact(val);
+   // 2. Primary Farmer Contact Phone
+if (field.id === 'fld_contact_phone') {
+  return (
+    <div key={field.id}>
+      <ContactNumberInput
+        id={`contact-input-${field.id}`}
+        value={farmerContact}
+        onChange={val => {
+          let contactDigits = val.replace(/\D/g, '');
 
-  // Convert formatted +63 value back to exactly 10 local digits
-  let contactDigits = val.replace(/\D/g, '');
+          // Remove +63 country code.
+          if (contactDigits.startsWith('63')) {
+            contactDigits = contactDigits.slice(2);
+          }
 
-  if (contactDigits.startsWith('63')) {
-    contactDigits = contactDigits.slice(2);
-  }
+          // Remove local leading zero.
+          if (contactDigits.startsWith('0')) {
+            contactDigits = contactDigits.slice(1);
+          }
 
-  if (contactDigits.startsWith('0')) {
-    contactDigits = contactDigits.slice(1);
-  }
+          // EXACTLY 10 digits maximum.
+          contactDigits = contactDigits.slice(0, 10);
 
-  contactDigits = contactDigits.slice(0, 10);
+          setFarmerContact(contactDigits);
 
-  const valid =
-    contactDigits.length === 10 &&
-    contactDigits.startsWith('9');
+          const valid =
+            contactDigits.length === 10 &&
+            contactDigits.startsWith('9');
 
-  if (contactTouched && !valid) {
-    setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
-  } else if (valid) {
-    setContactError(null);
-  }
-}}
-            label={field.label}
-            required={field.required}
-            placeholder={field.placeholder || '9123456789'}
-            helpText={field.helpText || 'Contact number must contain exactly 10 digits after +63.'}
-            errorOverride={contactError}
-          />
-        </div>
-      );
-    }
+          if (contactTouched && !valid) {
+            setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
+          } else if (valid) {
+            setContactError(null);
+          }
+        }}
+        label={field.label}
+        required={field.required}
+        placeholder={field.placeholder || '9171234567'}
+        helpText={
+          field.helpText ||
+          'Enter exactly 10 digits after +63.'
+        }
+        errorOverride={contactError}
+      />
+    </div>
+  );
+}
 
     // 3. Barangay (barangay_select or fld_barangay)
     if (field.id === 'fld_barangay' || field.type === 'barangay_select') {
@@ -2209,7 +2214,13 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-  // Strict Contact Number Validation: exactly 10 digits after +63
+// ============================================================
+// STRICT PHILIPPINE CONTACT NUMBER VALIDATION
+// +63 is the fixed country code.
+// User must enter EXACTLY 10 digits after +63.
+// Example: +63 917 123 4567
+// ============================================================
+
 const contactReq = getField('fld_contact_phone')?.required ?? true;
 
 let normalizedContactInput = farmerContact;
@@ -2217,17 +2228,17 @@ let normalizedContactInput = farmerContact;
 if (contactReq || farmerContact.trim()) {
   let contactDigits = farmerContact.replace(/\D/g, '');
 
-  // Remove Philippine country code
+  // Remove Philippine country code if present.
   if (contactDigits.startsWith('63')) {
     contactDigits = contactDigits.slice(2);
   }
 
-  // Remove local leading zero
+  // Remove local leading zero if present.
   if (contactDigits.startsWith('0')) {
     contactDigits = contactDigits.slice(1);
   }
 
-  // Exactly 10 digits after +63
+  // EXACTLY 10 local digits.
   contactDigits = contactDigits.slice(0, 10);
 
   const validContact =
@@ -2237,13 +2248,15 @@ if (contactReq || farmerContact.trim()) {
   if (!validContact) {
     setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
     setContactTouched(true);
+
     alert(CONTACT_NUMBER_ERROR_MESSAGE);
+
     return;
   }
 
+  // Store as +63 followed by exactly 10 local digits.
   normalizedContactInput = `+63 ${contactDigits}`;
 }
-
     // Birth Date Validation: Cannot be in the future
     const ageResult = calculateSwineAge(birthDate);
     if (!ageResult.isValid) {
