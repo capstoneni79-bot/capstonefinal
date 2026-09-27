@@ -63,7 +63,7 @@ export function createApp() {
   });
 
   // Regex patterns
-  const EXACT_11_DIGIT_REGEX = /^\d{11}$/;
+  const EXACT_10_DIGIT_REGEX = /^9\d{9}$/;
   const PIG_ID_TAG_REGEX = /^HIN-\d{4}-\d{4,}$/;
 
   // Helper to extract authenticated user security context
@@ -369,13 +369,18 @@ export function createApp() {
     }
 
     const { farmerContact, pigIdTag, earTagNo, birthDate } = record;
-    if (farmerContact && (!EXACT_11_DIGIT_REGEX.test(farmerContact.replace(/\D/g, '')))) {
-      return res.status(400).json({
-        success: false,
-        field: 'farmerContact',
-        error: 'Contact number must contain exactly 11 digits.',
-      });
-    }
+    if (farmerContact) {
+  const contactDigits = String(farmerContact).replace(/\D/g, '');
+
+  if (!EXACT_10_DIGIT_REGEX.test(contactDigits)) {
+    return res.status(400).json({
+      success: false,
+      field: 'farmerContact',
+      error:
+        'Contact number must contain exactly 10 digits after +63 (e.g. 9171234567).',
+    });
+  }
+}
 
     let tag = (pigIdTag || earTagNo || '').trim();
     if (!tag) {
@@ -453,13 +458,18 @@ export function createApp() {
     const record = req.body;
 
     const { farmerContact, birthDate } = record || {};
-    if (farmerContact && (!EXACT_11_DIGIT_REGEX.test(farmerContact.replace(/\D/g, '')))) {
-      return res.status(400).json({
-        success: false,
-        field: 'farmerContact',
-        error: 'Contact number must contain exactly 11 digits.',
-      });
-    }
+    if (farmerContact) {
+  const contactDigits = String(farmerContact).replace(/\D/g, '');
+
+  if (!EXACT_10_DIGIT_REGEX.test(contactDigits)) {
+    return res.status(400).json({
+      success: false,
+      field: 'farmerContact',
+      error:
+        'Contact number must contain exactly 10 digits after +63 (e.g. 9171234567).',
+    });
+  }
+}
 
     const effectiveBirthDate = birthDate || record.date_of_birth || record.dateOfBirth || record.dob;
     if (effectiveBirthDate) {
