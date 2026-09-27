@@ -157,7 +157,11 @@ export const SwineForm: React.FC<SwineFormProps> = ({
   const [farmerName, setFarmerName] = useState(initialData?.farmerName || '');
   
   // Strict 10-digit Contact Number state
-  const cleanInitialContact = (initialData?.farmerContact || '').replace(/\D/g, '').slice(0, 10);
+  const cleanInitialContact = (initialData?.farmerContact || '')
+  .replace(/\D/g, '')
+  .replace(/^63/, '')
+  .replace(/^0/, '')
+  .slice(0, 10);
   const [farmerContact, setFarmerContact] = useState<string>(cleanInitialContact);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactTouched, setContactTouched] = useState<boolean>(false);
@@ -562,18 +566,36 @@ export const SwineForm: React.FC<SwineFormProps> = ({
           <ContactNumberInput
             id={`contact-input-${field.id}`}
             value={farmerContact}
-            onChange={val => {
-              setFarmerContact(val);
-              if (contactTouched && !isValidContactNumber(val)) {
-                setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
-              } else if (isValidContactNumber(val)) {
-                setContactError(null);
-              }
-            }}
+           onChange={val => {
+  setFarmerContact(val);
+
+  // Convert formatted +63 value back to exactly 10 local digits
+  let contactDigits = val.replace(/\D/g, '');
+
+  if (contactDigits.startsWith('63')) {
+    contactDigits = contactDigits.slice(2);
+  }
+
+  if (contactDigits.startsWith('0')) {
+    contactDigits = contactDigits.slice(1);
+  }
+
+  contactDigits = contactDigits.slice(0, 10);
+
+  const valid =
+    contactDigits.length === 10 &&
+    contactDigits.startsWith('9');
+
+  if (contactTouched && !valid) {
+    setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
+  } else if (valid) {
+    setContactError(null);
+  }
+}}
             label={field.label}
             required={field.required}
             placeholder={field.placeholder || '9123456789'}
-            helpText={field.helpText || 'Contact number must contain exactly 10 digits.'}
+            helpText={field.helpText || 'Contact number must contain exactly 10 digits after +63.'}
             errorOverride={contactError}
           />
         </div>
@@ -2187,16 +2209,40 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-    // Strict Contact Number Validation: exactly 10 digits only
-    const contactReq = getField('fld_contact_phone')?.required ?? true;
-    if (contactReq || farmerContact.trim()) {
-      if (!isValidContactNumber(farmerContact)) {
-        setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
-        setContactTouched(true);
-        alert(CONTACT_NUMBER_ERROR_MESSAGE);
-        return;
-      }
-    }
+  // Strict Contact Number Validation: exactly 10 digits after +63
+const contactReq = getField('fld_contact_phone')?.required ?? true;
+
+let normalizedContactInput = farmerContact;
+
+if (contactReq || farmerContact.trim()) {
+  let contactDigits = farmerContact.replace(/\D/g, '');
+
+  // Remove Philippine country code
+  if (contactDigits.startsWith('63')) {
+    contactDigits = contactDigits.slice(2);
+  }
+
+  // Remove local leading zero
+  if (contactDigits.startsWith('0')) {
+    contactDigits = contactDigits.slice(1);
+  }
+
+  // Exactly 10 digits after +63
+  contactDigits = contactDigits.slice(0, 10);
+
+  const validContact =
+    contactDigits.length === 10 &&
+    contactDigits.startsWith('9');
+
+  if (!validContact) {
+    setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
+    setContactTouched(true);
+    alert(CONTACT_NUMBER_ERROR_MESSAGE);
+    return;
+  }
+
+  normalizedContactInput = `+63 ${contactDigits}`;
+}
 
     // Birth Date Validation: Cannot be in the future
     const ageResult = calculateSwineAge(birthDate);
@@ -2256,7 +2302,9 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-    const normalizedContact = normalizePhilippinePhoneNumber(farmerContact) || farmerContact.trim();
+  const normalizedContact =
+  normalizePhilippinePhoneNumber(normalizedContactInput) ||
+  normalizedContactInput.trim();
 
     const newRecord: SwineRecord = {
       id: initialData?.id || 'swine-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
