@@ -18,6 +18,7 @@ import { Barangay, SwineRecord, SwineType } from '../../types';
 import { storageService } from '../../services/storageService';
 import { useLanguage } from '../../context/LanguageContext';
 import { validateHinunanganRegistration } from '../../utils/boundaryValidation';
+import { normalizePhilippinePhoneNumber } from '../../utils/registryFieldUtils';
 import {
   ContactNumberInput,
   isValidContactNumber,
@@ -144,7 +145,7 @@ export const SwineFarmRegistrationModal: React.FC<SwineFarmRegistrationModalProp
       id: 'swine_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       earTagNo: generatedEarTag,
       farmerName: farmerName.trim(),
-      farmerContact: farmerContact.trim() || '0917-000-0000',
+      farmerContact: farmerContact.trim() ? normalizePhilippinePhoneNumber(farmerContact) : '',
       farmerAddress: purokAddress.trim() ? `${purokAddress.trim()}, Brgy. ${selectedBarangay}` : `Brgy. ${selectedBarangay}`,
       barangay: selectedBarangay,
       rsbsaId: rsbsaId.trim() || `RSBSA-08-64-09-${cleanNum}`,
@@ -323,9 +324,9 @@ export const SwineFarmRegistrationModal: React.FC<SwineFarmRegistrationModalProp
                     value={farmerContact}
                     onChange={setFarmerContact}
                     label="Contact Number"
-                    placeholder="09123456789"
+                    placeholder="9125918781"
                     required={false}
-                    helpText="Accepts exactly 11 digits only (0-9)."
+                    helpText="Enter 10 digits starting with 9; +63 is added automatically."
                   />
                 </div>
 

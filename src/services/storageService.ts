@@ -38,6 +38,7 @@ import {
 } from '../types';
 import { LegalImportHistoryRecord } from '../types/legalImport';
 import { indexedDbService } from './indexedDbService';
+import { getPhilippineLocalContactDigits, isValidPhilippinePhoneNumber, normalizePhilippinePhoneNumber } from '../utils/registryFieldUtils';
 import {
   calculateSwineAge,
   classifyFarmScale,
@@ -158,14 +159,14 @@ export const storageService = {
     if (stored === null || stored.length === 0) {
       return [];
     }
-    // Existing Data Compatibility: Normalize legacy 11-digit formatted contacts (e.g. 0917-888-9999 -> 09178889999)
+    // Convert stored legacy 09-prefixed contacts to the current canonical +63 representation.
     let hasNormalized = false;
     const normalized = stored.map(record => {
       if (record.farmerContact && typeof record.farmerContact === 'string') {
         const digits = record.farmerContact.replace(/\D/g, '');
-        if (digits.length === 11 && record.farmerContact !== digits) {
+        if (digits.length === 11 && digits.startsWith('09') && /^9\d{9}$/.test(digits.slice(1))) {
           hasNormalized = true;
-          return { ...record, farmerContact: digits };
+          return { ...record, farmerContact: normalizePhilippinePhoneNumber(digits.slice(1)) };
         }
       }
       return record;
@@ -331,9 +332,9 @@ export const storageService = {
   },
 
   async saveSwineRecordCloud(record: SwineRecord, isEdit: boolean = false): Promise<SwineRecord> {
-    const contactDigits = (record.farmerContact || '').replace(/\D/g, '');
-    if (!record.farmerContact || typeof record.farmerContact !== 'string' || !(contactDigits.length === 10 || contactDigits.length === 11 || contactDigits.length === 12)) {
-      throw new Error('Contact number must be a valid Philippine mobile number (11 digits, e.g. 09171234567).');
+    const contactDigits = getPhilippineLocalContactDigits(record.farmerContact);
+    if (!record.farmerContact || !isValidPhilippinePhoneNumber(record.farmerContact)) {
+      throw new Error('Contact number must contain exactly 10 digits after +63 and start with 9 (e.g. +63 9125918781).');
     }
 
     const records = this.getSwineRecords();
@@ -368,7 +369,7 @@ export const storageService = {
       weightKg: record.weightKg || (record.actualWeightKg ? Number(record.actualWeightKg) : 60),
       farmScale,
       asfZone,
-      farmerContact: record.farmerContact.trim(),
+      farmerContact: normalizePhilippinePhoneNumber(contactDigits),
       updatedAt: new Date().toISOString(),
     };
 

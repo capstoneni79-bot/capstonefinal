@@ -64,7 +64,7 @@ import {
   validateHinunanganRegistration,
   isPointInsideHinunangan,
 } from '../../utils/boundaryValidation';
-import { getFieldKey, normalizePhilippinePhoneNumber } from '../../utils/registryFieldUtils';
+import { getFieldKey, getPhilippineLocalContactDigits, normalizePhilippinePhoneNumber } from '../../utils/registryFieldUtils';
 import { generateFieldValue } from '../../utils/autoGenFieldUtils';
 import {
   generateNextPigIdTag,
@@ -156,8 +156,8 @@ export const SwineForm: React.FC<SwineFormProps> = ({
 
   const [farmerName, setFarmerName] = useState(initialData?.farmerName || '');
   
-  // Strict 11-digit Contact Number state
-  const cleanInitialContact = (initialData?.farmerContact || '').replace(/\D/g, '').slice(0, 11);
+  // Keep only the ten local digits in form state; +63 is displayed separately.
+  const cleanInitialContact = getPhilippineLocalContactDigits(initialData?.farmerContact);
   const [farmerContact, setFarmerContact] = useState<string>(cleanInitialContact);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactTouched, setContactTouched] = useState<boolean>(false);
@@ -572,8 +572,8 @@ export const SwineForm: React.FC<SwineFormProps> = ({
             }}
             label={field.label}
             required={field.required}
-            placeholder={field.placeholder || '09123456789'}
-            helpText={field.helpText || 'Contact number must contain exactly 11 digits.'}
+            placeholder={field.placeholder || '9125918781'}
+            helpText={field.helpText || 'Enter 10 digits starting with 9; +63 is added automatically.'}
             errorOverride={contactError}
           />
         </div>
@@ -2187,7 +2187,7 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-    // Strict Contact Number Validation: exactly 11 digits only
+    // Validate exactly ten local digits after the fixed +63 prefix.
     const contactReq = getField('fld_contact_phone')?.required ?? true;
     if (contactReq || farmerContact.trim()) {
       if (!isValidContactNumber(farmerContact)) {

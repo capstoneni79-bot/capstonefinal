@@ -26,6 +26,7 @@ import { DEFAULT_SIDEBAR_THEME, INITIAL_REGISTRY_FORM_SCHEMA } from '../data/ini
 import { INITIAL_LANDING_CONFIG } from '../data/initialData.ts';
 import { DEFAULT_MASTER_CONFIG } from '../data/defaultMasterConfig.ts';
 import { interpretSuperAdminConfigCommand } from '../utils/configCommandInterpreter.ts';
+import { isValidPhilippinePhoneNumber, normalizePhilippinePhoneNumber } from '../utils/registryFieldUtils.ts';
 
 export function createApp() {
   const app = express();
@@ -63,7 +64,6 @@ export function createApp() {
   });
 
   // Regex patterns
-  const EXACT_11_DIGIT_REGEX = /^\d{11}$/;
   const PIG_ID_TAG_REGEX = /^HIN-\d{4}-\d{4,}$/;
 
   // Helper to extract authenticated user security context
@@ -369,13 +369,14 @@ export function createApp() {
     }
 
     const { farmerContact, pigIdTag, earTagNo, birthDate } = record;
-    if (farmerContact && (!EXACT_11_DIGIT_REGEX.test(farmerContact.replace(/\D/g, '')))) {
+    if (farmerContact && !isValidPhilippinePhoneNumber(farmerContact)) {
       return res.status(400).json({
         success: false,
         field: 'farmerContact',
-        error: 'Contact number must contain exactly 11 digits.',
+        error: 'Contact number must contain exactly 10 digits after +63 and start with 9 (e.g. +63 9125918781).',
       });
     }
+    if (farmerContact) record.farmerContact = normalizePhilippinePhoneNumber(farmerContact);
 
     let tag = (pigIdTag || earTagNo || '').trim();
     if (!tag) {
@@ -453,13 +454,14 @@ export function createApp() {
     const record = req.body;
 
     const { farmerContact, birthDate } = record || {};
-    if (farmerContact && (!EXACT_11_DIGIT_REGEX.test(farmerContact.replace(/\D/g, '')))) {
+    if (farmerContact && !isValidPhilippinePhoneNumber(farmerContact)) {
       return res.status(400).json({
         success: false,
         field: 'farmerContact',
-        error: 'Contact number must contain exactly 11 digits.',
+        error: 'Contact number must contain exactly 10 digits after +63 and start with 9 (e.g. +63 9125918781).',
       });
     }
+    if (farmerContact) record.farmerContact = normalizePhilippinePhoneNumber(farmerContact);
 
     const effectiveBirthDate = birthDate || record.date_of_birth || record.dateOfBirth || record.dob;
     if (effectiveBirthDate) {

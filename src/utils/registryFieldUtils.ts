@@ -188,56 +188,29 @@ export function getFieldValue(record: SwineRecord, field: RegistryFormField): an
   return undefined;
 }
 
-/**
- * Normalizes any Philippine phone number representation to canonical '+63 9XX XXX XXXX'
- * Handles:
- * - '9171234567' -> '+63 917 123 4567'
- * - '09171234567' -> '+63 917 123 4567'
- * - '+639171234567' or '+63 917 123 4567' -> '+63 917 123 4567'
- * - '639171234567' -> '+63 917 123 4567'
- * Avoids any duplicate prefix like '+63+63...'
- */
+/** Extracts the ten local digits from local or canonical Philippine mobile numbers. */
+export function getPhilippineLocalContactDigits(val: string | null | undefined): string {
+  if (!val) return '';
+  const contactDigits = String(val).replace(/\D/g, '');
+  if (contactDigits.length === 10) return contactDigits;
+  if (contactDigits.length === 12 && contactDigits.startsWith('63')) return contactDigits.slice(2);
+  return '';
+}
+
+/** Normalizes a valid Philippine mobile number to canonical '+63 9XX XXX XXXX'. */
 export function normalizePhilippinePhoneNumber(val: string | null | undefined): string {
   if (!val) return '';
-  const str = String(val).trim();
-  // Strip duplicate +63 occurrences or non-digit chars
-  let cleaned = str.replace(/[^\d+]/g, '');
-  while (cleaned.startsWith('+63+63') || cleaned.startsWith('+6363')) {
-    cleaned = cleaned.replace(/^\+63(\+?63)/, '+63');
-  }
-
-  // Extract pure digits
-  let digits = cleaned.replace(/\D/g, '');
-
-  // If starts with 63 and length >= 12
-  if (digits.startsWith('63') && digits.length >= 12) {
-    digits = digits.slice(2);
-  } else if (digits.startsWith('0') && digits.length === 11) {
-    digits = digits.slice(1);
-  }
-
-  // If standard 10 digits
-  if (digits.length === 10) {
-    return `+63 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
-  }
-
-  if (digits.length > 0) {
-    return `+63 ${digits}`;
-  }
-
-  return '';
+  const contactDigits = getPhilippineLocalContactDigits(val);
+  if (contactDigits.length !== 10 || !/^9\d{9}$/.test(contactDigits)) return '';
+  return `+63 ${contactDigits.slice(0, 3)} ${contactDigits.slice(3, 6)} ${contactDigits.slice(6)}`;
 }
 
 /**
  * Validates if the phone number is a valid 10-digit Philippine mobile number
  */
 export function isValidPhilippinePhoneNumber(val: string | null | undefined): boolean {
-  if (!val) return false;
-  const digits = String(val).replace(/\D/g, '');
-  if (digits.length === 10 && digits.startsWith('9')) return true;
-  if (digits.length === 11 && digits.startsWith('09')) return true;
-  if (digits.length === 12 && digits.startsWith('639')) return true;
-  return false;
+  const contactDigits = getPhilippineLocalContactDigits(val);
+  return contactDigits.length === 10 && /^9\d{9}$/.test(contactDigits);
 }
 
 /**

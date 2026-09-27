@@ -113,7 +113,7 @@ export const CORE_SWINE_FIELDS: CoreFieldDef[] = [
     ],
     type: 'phone',
     required: false,
-    helpText: '11-digit Philippine mobile phone number',
+    helpText: '10-digit Philippine mobile number starting with 9',
   },
   {
     key: 'farm_name',
@@ -1073,7 +1073,7 @@ export function generateDynamicImportWorkbook(
       sampleRow1[headerTitle] = 'Poblacion';
       sampleRow2[headerTitle] = 'Labrador';
     } else if (cf.key === 'farmer_contact') {
-      sampleRow1[headerTitle] = '09171234567';
+      sampleRow1[headerTitle] = '9125918781';
       sampleRow2[headerTitle] = '09287654321';
     } else if (cf.key === 'birth_date') {
       sampleRow1[headerTitle] = '2026-01-15';

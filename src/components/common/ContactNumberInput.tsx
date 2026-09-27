@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AlertCircle, CheckCircle2, Phone } from 'lucide-react';
 
-export const CONTACT_NUMBER_ERROR_MESSAGE = 'Please enter a valid 10-digit Philippine mobile number (e.g. 917 123 4567).';
+export const CONTACT_NUMBER_ERROR_MESSAGE = 'Please enter exactly 10 digits starting with 9 (e.g. +63 9125918781).';
 
 export interface ContactNumberInputProps {
   id?: string;
@@ -19,15 +19,12 @@ export interface ContactNumberInputProps {
 }
 
 /**
- * Validates that the input represents a valid Philippine mobile number (10 digits starting with 9, or with 09 / +63)
+ * Validates the ten local digits entered after the fixed +63 prefix.
  */
 export const isValidContactNumber = (val: string): boolean => {
   if (!val) return false;
-  const digits = val.replace(/\D/g, '');
-  if (digits.length === 10 && digits.startsWith('9')) return true;
-  if (digits.length === 11 && digits.startsWith('09')) return true;
-  if (digits.length === 12 && digits.startsWith('639')) return true;
-  return false;
+  const contactDigits = val.replace(/\D/g, '');
+  return contactDigits.length === 10 && /^9\d{9}$/.test(contactDigits);
 };
 
 export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
@@ -48,18 +45,15 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
   const [internalError, setInternalError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Extract clean 10-digit portion for display if prefix is already +63 or 09
+  // Display only local digits when editing an existing canonical +63 value.
   const getDisplayDigits = (raw: string) => {
-    let d = (raw || '').replace(/\D/g, '');
-    if (d.startsWith('63')) {
-      d = d.slice(2);
-    }
-    d = d.replace(/^0+/, '');
-    return d.slice(0, 10);
+    const digits = (raw || '').replace(/\D/g, '');
+    const localDigits = digits.length === 12 && digits.startsWith('63') ? digits.slice(2) : digits;
+    return localDigits.slice(0, 10);
   };
 
   const currentDigits = getDisplayDigits(value);
-  const isValid = isValidContactNumber(value) || (currentDigits.length === 10 && currentDigits.startsWith('9'));
+  const isValid = isValidContactNumber(currentDigits);
 
   useEffect(() => {
     if (onValidate) {
@@ -116,15 +110,13 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
 
     const pastedText = e.clipboardData.getData('text') || '';
     let digits = pastedText.replace(/\D/g, '');
-    if (digits.startsWith('63')) {
+    if (digits.length === 12 && digits.startsWith('63')) {
       digits = digits.slice(2);
     }
-    digits = digits.replace(/^0+/, '');
     const clean10 = digits.slice(0, 10);
-    const formatted = clean10 ? `+63 ${clean10}` : '';
-    onChange(formatted);
+    onChange(clean10);
 
-    if (clean10.length !== 10 || !clean10.startsWith('9')) {
+    if (!isValidContactNumber(clean10)) {
       setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
     } else {
       setInternalError(null);
@@ -132,17 +124,11 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let rawVal = e.target.value.replace(/\D/g, '');
-    if (rawVal.startsWith('63')) {
-      rawVal = rawVal.slice(2);
-    }
-    rawVal = rawVal.replace(/^0+/, '');
-    const clean10 = rawVal.slice(0, 10);
-    const formatted = clean10 ? `+63 ${clean10}` : '';
-    onChange(formatted);
+    const clean10 = e.target.value.replace(/\D/g, '').slice(0, 10);
+    onChange(clean10);
 
     if (touched) {
-      if (clean10.length !== 10 || !clean10.startsWith('9')) {
+      if (!isValidContactNumber(clean10)) {
         setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
       } else {
         setInternalError(null);
@@ -195,7 +181,7 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
           id={id}
           type="text"
           inputMode="numeric"
-          pattern="[0-9]{10}"
+          pattern="9[0-9]{9}"
           autoComplete="tel-national"
           maxLength={10}
           disabled={disabled}

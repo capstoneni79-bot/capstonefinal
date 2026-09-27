@@ -63,7 +63,46 @@ This guide provides step-by-step instructions for deploying the **DA Hinunangan 
 -- 1. ENABLE POSTGIS EXTENSION
 -- ============================================================================
 CREATE EXTENSION IF NOT EXISTS postgis SCHEMA extensions;
+FIX PHILIPPINE CONTACT NUMBER VALIDATION — STRICT 10-DIGIT RULE
 
+In the Swine Registry application, completely fix the Contact Number validation so the system consistently uses the Philippine mobile number format:
+
++63 9125918781
+
+IMPORTANT RULE:
+- +63 is the fixed country code and is NOT counted.
+- The user must enter EXACTLY 10 digits after +63.
+- The 10 digits MUST start with 9.
+- Valid format example: +63 9125918781
+- Local digits: 9125918781
+- Required regex: ^9\d{9}$
+
+CURRENT PROBLEM:
+The Contact Number field UI already shows 10/10 and accepts a 10-digit number, but when clicking SAVE, the application/Supabase save process still rejects the number using an OLD 11-digit validation rule.
+
+Example error currently appearing:
+"Contact number must contain exactly 10 digits after +63 (e.g. 9171234567)."
+
+Remove all remaining old 11-digit validation logic from the save process.
+
+APPLY THE FIX EVERYWHERE:
+
+1. CONTACT NUMBER INPUT
+- Display a fixed +63 prefix.
+- User enters only the 10 local digits.
+- Maximum length = 10.
+- Do not count +63 as part of the 10 digits.
+- Show `10/10` when complete.
+- Valid number example:
+  +63 9125918781
+
+2. FRONTEND VALIDATION
+Use this rule everywhere:
+```ts
+const contactDigits = value.replace(/\D/g, '');
+const valid =
+  contactDigits.length === 10 &&
+  /^9\d{9}$/.test(contactDigits);
 -- ============================================================================
 -- 2. USERS TABLE
 -- ============================================================================
