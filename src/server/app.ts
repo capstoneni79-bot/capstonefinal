@@ -59,6 +59,20 @@ export function createApp() {
     return 'connection_failed';
   };
 
+  const getConfiguredDatabaseHost = (): string => {
+    if (process.env.SQL_HOST?.trim()) return process.env.SQL_HOST.trim();
+    const connectionString =
+      process.env.DATABASE_URL?.trim() ||
+      process.env.SUPABASE_DATABASE_URL?.trim() ||
+      process.env.POSTGRES_URL?.trim();
+    if (!connectionString) return 'not_configured';
+    try {
+      return new URL(connectionString).hostname || 'invalid_database_url';
+    } catch {
+      return 'invalid_database_url';
+    }
+  };
+
   // Non-blocking background table verification
   initPostgresTables().catch(err => {
     console.warn('PostgreSQL table check notice:', err?.message || err);
@@ -95,6 +109,7 @@ export function createApp() {
       service: 'hinunangan-swine-registry',
       database: dbStatus,
       database_engine: global._isPgMem ? 'memory' : 'postgres',
+      database_host: getConfiguredDatabaseHost(),
       database_configured: Boolean(
         process.env.DATABASE_URL?.trim() ||
         process.env.SUPABASE_DATABASE_URL?.trim() ||
