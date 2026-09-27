@@ -155,8 +155,7 @@ export const SwineForm: React.FC<SwineFormProps> = ({
   const [earTagNo] = useState<string>(pigIdTag);
 
   const [farmerName, setFarmerName] = useState(initialData?.farmerName || '');
-  
-  // Keep only the ten local digits in form state; +63 is displayed separately.
+
   const cleanInitialContact = getPhilippineLocalContactDigits(initialData?.farmerContact);
   const [farmerContact, setFarmerContact] = useState<string>(cleanInitialContact);
   const [contactError, setContactError] = useState<string | null>(null);
@@ -563,17 +562,20 @@ export const SwineForm: React.FC<SwineFormProps> = ({
             id={`contact-input-${field.id}`}
             value={farmerContact}
             onChange={val => {
-              setFarmerContact(val);
-              if (contactTouched && !isValidContactNumber(val)) {
+              const contactDigits = val.replace(/\D/g, '').replace(/^63/, '').replace(/^0/, '').slice(0, 10);
+              setFarmerContact(contactDigits);
+
+              const valid = isValidContactNumber(contactDigits);
+              if (contactTouched && !valid) {
                 setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
-              } else if (isValidContactNumber(val)) {
+              } else if (valid) {
                 setContactError(null);
               }
             }}
             label={field.label}
             required={field.required}
-            placeholder={field.placeholder || '9125918781'}
-            helpText={field.helpText || 'Enter 10 digits starting with 9; +63 is added automatically.'}
+            placeholder={field.placeholder || '9171234567'}
+            helpText={field.helpText || 'Enter exactly 10 digits after +63.'}
             errorOverride={contactError}
           />
         </div>
@@ -2187,17 +2189,34 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-    // Validate exactly ten local digits after the fixed +63 prefix.
+    // Validate the Philippine mobile number field before saving.
     const contactReq = getField('fld_contact_phone')?.required ?? true;
+    let normalizedContactInput = farmerContact;
+
     if (contactReq || farmerContact.trim()) {
-      if (!isValidContactNumber(farmerContact)) {
+      let contactDigits = farmerContact.replace(/\D/g, '');
+
+      if (contactDigits.startsWith('63')) {
+        contactDigits = contactDigits.slice(2);
+      }
+
+      if (contactDigits.startsWith('0')) {
+        contactDigits = contactDigits.slice(1);
+      }
+
+      contactDigits = contactDigits.slice(0, 10);
+
+      const validContact = contactDigits.length === 10 && /^9\d{9}$/.test(contactDigits);
+
+      if (!validContact) {
         setContactError(CONTACT_NUMBER_ERROR_MESSAGE);
         setContactTouched(true);
         alert(CONTACT_NUMBER_ERROR_MESSAGE);
         return;
       }
-    }
 
+      normalizedContactInput = `+63 ${contactDigits}`;
+    }
     // Birth Date Validation: Cannot be in the future
     const ageResult = calculateSwineAge(birthDate);
     if (!ageResult.isValid) {
@@ -2256,7 +2275,9 @@ export const SwineForm: React.FC<SwineFormProps> = ({
       return;
     }
 
-    const normalizedContact = normalizePhilippinePhoneNumber(farmerContact) || farmerContact.trim();
+  const normalizedContact =
+  normalizePhilippinePhoneNumber(normalizedContactInput) ||
+  normalizedContactInput.trim();
 
     const newRecord: SwineRecord = {
       id: initialData?.id || 'swine-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),

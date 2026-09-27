@@ -1,190 +1,160 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { AlertCircle, CheckCircle2, Phone } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
 
-export const CONTACT_NUMBER_ERROR_MESSAGE = 'Please enter exactly 10 digits starting with 9 (e.g. +63 9125918781).';
+export const CONTACT_NUMBER_ERROR_MESSAGE =
+  'Please enter a valid 10-digit Philippine mobile number (e.g. 917 123 4567).';
 
-export interface ContactNumberInputProps {
-  id?: string;
+/**
+ * Philippine mobile number validation.
+ *
+ * IMPORTANT:
+ * The +63 country code is NOT included in the 10 digits.
+ *
+ * Valid:
+ *   9171234567
+ *   +63 917 123 4567
+ *
+ * Invalid:
+ *   09171234567
+ *   639171234567
+ *   917123456
+ *   91712345678
+ */
+export const isValidContactNumber = (val: string): boolean => {
+  if (!val) return false;
+
+  let digits = val.replace(/\D/g, '');
+
+  if (digits.startsWith('63')) {
+    digits = digits.slice(2);
+  }
+
+  if (digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+
+  return digits.length === 10 && /^9\d{9}$/.test(digits);
+};
+
+interface ContactNumberInputProps {
+  id: string;
   value: string;
   onChange: (value: string) => void;
   label?: string;
   required?: boolean;
   placeholder?: string;
   helpText?: string;
-  disabled?: boolean;
-  showStatusIndicator?: boolean;
-  className?: string;
   errorOverride?: string | null;
-  onValidate?: (isValid: boolean) => void;
+  disabled?: boolean;
 }
 
-/**
- * Validates the ten local digits entered after the fixed +63 prefix.
- */
-export const isValidContactNumber = (val: string): boolean => {
-  if (!val) return false;
-  const digits = (val || '').replace(/\D/g, '');
-  const cleaned = digits.startsWith('63') ? digits.slice(2) : digits;
-  const normalized = cleaned.startsWith('0') ? cleaned.slice(1) : cleaned;
-  return normalized.length === 10 && /^9\d{9}$/.test(normalized);
-};
-
 export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
-  id = 'farmer-contact-number',
+  id,
   value,
   onChange,
   label = 'Contact Number',
-  required = true,
-  placeholder = '917 123 4567',
-  helpText,
-  disabled = false,
-  showStatusIndicator = true,
-  className = '',
+  required = false,
+  placeholder = '9171234567',
+  helpText = 'Enter exactly 10 digits after +63.',
   errorOverride,
-  onValidate,
+  disabled = false,
 }) => {
   const [touched, setTouched] = useState(false);
-  const [internalError, setInternalError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Display only local digits when editing an existing canonical +63 value.
-  const getDisplayDigits = (raw: string) => {
-    const digits = (raw || '').replace(/\D/g, '');
-    const withoutCountry = digits.startsWith('63') ? digits.slice(2) : digits;
-    const withoutZero = withoutCountry.startsWith('0') ? withoutCountry.slice(1) : withoutCountry;
-    return withoutZero.slice(0, 10);
+  /**
+   * Always convert the current value to the
+   * 10-digit local Philippine mobile number.
+   */
+  const getLocalDigits = (input: string): string => {
+    let digits = input.replace(/\D/g, '');
+
+    // Remove +63 / 63.
+    if (digits.startsWith('63')) {
+      digits = digits.slice(2);
+    }
+
+    // Remove local 0.
+    if (digits.startsWith('0')) {
+      digits = digits.slice(1);
+    }
+
+    // EXACTLY 10 digits maximum.
+    return digits.slice(0, 10);
   };
 
-  const currentDigits = getDisplayDigits(value);
+  const currentDigits = getLocalDigits(value);
+
   const isValid = isValidContactNumber(currentDigits);
 
-  useEffect(() => {
-    if (onValidate) {
-      onValidate(isValid);
-    }
-  }, [isValid, onValidate]);
+  const error =
+    errorOverride !== undefined
+      ? errorOverride
+      : touched && !isValid
+      ? CONTACT_NUMBER_ERROR_MESSAGE
+      : null;
 
-  // Sync validation error
-  useEffect(() => {
-    if (errorOverride !== undefined) {
-      setInternalError(errorOverride);
-    } else if (touched) {
-      if (!isValid && (required || value.trim().length > 0)) {
-        setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
-      } else {
-        setInternalError(null);
-      }
-    }
-  }, [value, touched, isValid, errorOverride, required]);
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    let digits = event.target.value.replace(/\D/g, '');
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Allow keyboard navigation & commands
-    if (
-      e.ctrlKey ||
-      e.metaKey ||
-      e.altKey ||
-      ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter'].includes(
-        e.key
-      )
-    ) {
-      return;
+    // If user pastes +63XXXXXXXXXX, remove 63.
+    if (digits.startsWith('63')) {
+      digits = digits.slice(2);
     }
 
-    // Only allow digits 0-9
-    if (!/^[0-9]$/.test(e.key)) {
-      e.preventDefault();
-      setTouched(true);
-      setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
-      return;
+    // If user enters 09XXXXXXXXX, remove 0.
+    if (digits.startsWith('0')) {
+      digits = digits.slice(1);
     }
 
-    const target = e.currentTarget;
-    const rawVal = getDisplayDigits(target.value);
-    const hasSelection = (target.selectionEnd || 0) - (target.selectionStart || 0) > 0;
-    if (rawVal.length >= 10 && !hasSelection) {
-      e.preventDefault();
+    // NEVER allow more than 10 local digits.
+    digits = digits.slice(0, 10);
+
+    onChange(digits);
+
+    if (!touched) {
       setTouched(true);
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    setTouched(true);
+  useEffect(() => {
+    // Keep component behavior synchronized with externally changed values.
+    if (value && !touched) {
+      const digits = getLocalDigits(value);
 
-    const pastedText = e.clipboardData.getData('text') || '';
-    let digits = pastedText.replace(/\D/g, '');
-    if (digits.startsWith('63')) digits = digits.slice(2);
-    if (digits.startsWith('0')) digits = digits.slice(1);
-    const clean10 = digits.slice(0, 10);
-    onChange(clean10);
-
-    if (!isValidContactNumber(clean10)) {
-      setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
-    } else {
-      setInternalError(null);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let digits = e.target.value.replace(/\D/g, '');
-    if (digits.startsWith('63')) digits = digits.slice(2);
-    if (digits.startsWith('0')) digits = digits.slice(1);
-    const clean10 = digits.slice(0, 10);
-    onChange(clean10);
-
-    if (touched) {
-      if (!isValidContactNumber(clean10)) {
-        setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
-      } else {
-        setInternalError(null);
+      if (digits.length === 10) {
+        setTouched(true);
       }
     }
-  };
-
-  const handleBlur = () => {
-    setTouched(true);
-    if (!isValid && (required || value.trim().length > 0)) {
-      setInternalError(CONTACT_NUMBER_ERROR_MESSAGE);
-    } else {
-      setInternalError(null);
-    }
-  };
-
-  const activeError = errorOverride || (touched && !isValid && (required || value.trim().length > 0) ? CONTACT_NUMBER_ERROR_MESSAGE : internalError);
+  }, [value]);
 
   return (
-    <div className={`space-y-1 ${className}`}>
-      <div className="flex items-center justify-between">
-        <label htmlFor={id} className="block font-bold text-stone-700 text-xs">
-          {label} {required && <span className="text-red-500">*</span>}
-        </label>
-        {showStatusIndicator && (
-          <span
-            className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md font-semibold transition ${
-              isValid
-                ? 'bg-emerald-100 text-emerald-800'
-                : currentDigits.length > 0
-                ? 'bg-amber-100 text-amber-800'
-                : 'text-stone-400'
-            }`}
-          >
-            {currentDigits.length}/10 digits (+63)
-          </span>
-        )}
-      </div>
+    <div className="w-full">
+      <label
+        htmlFor={id}
+        className="block font-bold text-stone-700 mb-1"
+      >
+        {label}{' '}
+        {required && <span className="text-red-500">*</span>}
+      </label>
 
-      <div className="relative flex rounded-xl border overflow-hidden shadow-2xs focus-within:ring-2 focus-within:ring-emerald-600">
-        {/* Country Code Prefix Badge */}
-        <div className="bg-stone-100 border-r border-stone-300 px-3 py-2 flex items-center gap-1.5 shrink-0 select-none text-xs font-bold text-stone-700">
-          <span className="text-sm">🇵🇭</span>
-          <span className="font-mono text-emerald-900">+63</span>
-          <span className="text-stone-300">|</span>
+      <div
+        className={`flex items-center w-full rounded-xl border bg-white overflow-hidden transition ${
+          error
+            ? 'border-red-400 ring-1 ring-red-200'
+            : isValid
+            ? 'border-emerald-400 ring-1 ring-emerald-100'
+            : 'border-stone-300 focus-within:ring-2 focus-within:ring-emerald-600'
+        }`}
+      >
+        {/* Fixed country code */}
+        <div className="flex items-center gap-1.5 px-3 py-2.5 bg-stone-100 border-r border-stone-300 text-sm font-bold text-stone-700 shrink-0">
+          <span>🇵🇭</span>
+          <span>+63</span>
         </div>
 
+        {/* 10-digit local number */}
         <input
-          ref={inputRef}
           id={id}
-          type="text"
+          type="tel"
           inputMode="numeric"
           pattern="9[0-9]{9}"
           autoComplete="tel-national"
@@ -192,42 +162,49 @@ export const ContactNumberInput: React.FC<ContactNumberInputProps> = ({
           disabled={disabled}
           value={currentDigits}
           onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onPaste={handlePaste}
-          onBlur={handleBlur}
+          onBlur={() => setTouched(true)}
+          required={required}
           placeholder={placeholder}
-          className={`flex-1 px-3.5 py-2.5 text-xs font-mono font-medium transition focus:outline-hidden ${
-            activeError
-              ? 'bg-red-50/20 text-red-950'
-              : isValid
-              ? 'bg-emerald-50/10 text-emerald-950'
-              : 'bg-white text-stone-900'
-          } disabled:bg-stone-100 disabled:text-stone-500`}
+          className="flex-1 min-w-0 px-3 py-2.5 outline-none bg-white text-stone-800 font-semibold tracking-wide"
+          aria-invalid={!!error}
+          aria-describedby={`${id}-help`}
         />
 
-        <div className="pr-3 flex items-center gap-1.5 pointer-events-none bg-white">
+        {/* Validation indicator */}
+        <div className="px-3 shrink-0">
           {isValid ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          ) : activeError ? (
-            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-emerald-600 font-black text-lg">✓</span>
           ) : (
-            <Phone className="w-3.5 h-3.5 text-stone-400" />
+            <span className="text-stone-300 text-sm">10</span>
           )}
         </div>
       </div>
 
-      {activeError ? (
+      {/* Digit counter */}
+      <div className="flex items-center justify-between mt-1">
         <p
-          id={`${id}-error`}
-          role="alert"
-          className="text-red-600 text-xs font-semibold mt-1 flex items-center gap-1.5 animate-in fade-in duration-200"
+          id={`${id}-help`}
+          className={`text-[10px] ${
+            error
+              ? 'text-red-600'
+              : isValid
+              ? 'text-emerald-600'
+              : 'text-stone-500'
+          }`}
         >
-          <AlertCircle className="w-3.5 h-3.5 shrink-0 text-red-600" />
-          <span>{CONTACT_NUMBER_ERROR_MESSAGE}</span>
+          {error || helpText}
         </p>
-      ) : helpText ? (
-        <p className="text-[11px] text-stone-500 mt-1">{helpText}</p>
-      ) : null}
+
+        <span
+          className={`text-[10px] font-bold ${
+            isValid ? 'text-emerald-600' : 'text-stone-400'
+          }`}
+        >
+          {currentDigits.length}/10
+        </span>
+      </div>
     </div>
   );
 };
+
+export default ContactNumberInput;
