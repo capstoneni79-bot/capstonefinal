@@ -70,6 +70,13 @@ export function createApp() {
       status: 'ok',
       service: 'hinunangan-swine-registry',
       database: dbStatus,
+      database_engine: global._isPgMem ? 'memory' : 'postgres',
+      database_configured: Boolean(
+        process.env.DATABASE_URL?.trim() ||
+        process.env.SUPABASE_DATABASE_URL?.trim() ||
+        process.env.POSTGRES_URL?.trim() ||
+        process.env.SQL_HOST?.trim()
+      ),
       ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
       swine_records_count: recordsCount,
       timestamp: new Date().toISOString(),
