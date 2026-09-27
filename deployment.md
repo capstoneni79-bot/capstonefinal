@@ -1,223 +1,198 @@
-# DA Hinunangan Swine Registry — Full-Stack Deployment Guide
+# DA Hinunangan Swine Registry — GitHub to Supabase and Vercel connection guide
 
-This guide provides step-by-step instructions for deploying the **DA Hinunangan Swine Registry** full-stack system:
-- **Database & Geospatial (PostGIS)**: [Supabase](https://supabase.com) (PostgreSQL 15+ with PostGIS Extension)
-- **Frontend & Serverless API**: [Vercel](https://vercel.com) (Vite React SPA + Express Serverless API via `api/index.js`)
+This project is already structured for a GitHub-connected deployment flow:
+
+- Frontend + API: Vercel
+- Database: Supabase PostgreSQL with PostGIS
+- Source code: GitHub repo
+
+The goal is simple: push the code to GitHub, connect that repo to Vercel, add the Supabase connection variables in Vercel, and let the app use Postgres for the cloud database.
 
 ---
 
-## 1. Architecture Overview
+## 1. What you need
 
+1. A GitHub repository with this project pushed
+2. A Supabase project
+3. A Vercel account
+4. The Supabase project URL and database connection string
+5. Optional Google Maps API key
+
+---
+
+## 2. Create the Supabase database
+
+1. Open https://supabase.com
+2. Sign in and click New Project
+3. Choose a project name, region, and database password
+4. Wait for Supabase to finish provisioning
+5. In the left menu, open SQL Editor
+6. Run the SQL from [supabase_schema.sql](supabase_schema.sql) to create the tables and PostGIS setup
+
+Important: do not skip PostGIS. The app checks the database schema and expects PostgreSQL tables to exist.
+
+---
+
+## 3. Get the correct connection values from Supabase
+
+Go to:
+
+- Project Settings → Database
+- Project Settings → API
+
+Copy these values:
+
+- Database connection string (URI)
+- Project URL
+- anon/public key
+
+Use a connection string like this:
+
+```bash
+postgresql://postgres:[YOUR_PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require
 ```
-                      ┌──────────────────────────────────────────┐
-                      │          Supabase PostgreSQL             │
-                      │  - PostGIS Extension (GIS boundaries)    │
-                      │  - Relational Tables (PK/FK Constraints) │
-                      │  - custom_fields JSONB (Dynamic Schemas) │
-                      └────────────────────┬─────────────────────┘
-                                           │
-                                           │ DATABASE_URL (SSL/Pooler)
-                                           ▼
-                      ┌──────────────────────────────────────────┐
-                      │         Vercel Serverless API            │
-                      │         (routes /api/* to Express)       │
-                      │   /api/health       /api/swine-records   │
-                      │   /api/registry-schema  /api/sync/pull   │
-                      └────────────────────┬─────────────────────┘
-                                           │
-                                           ▼
-                      ┌──────────────────────────────────────────┐
-                      │           Vercel Static Edge             │
-                      │     (Vite React Frontend SPA / PWA)      │
-                      └────────────────────┬─────────────────────┘
-                                           │
-                        ┌──────────────────┴──────────────────┐
-                        │                                     │
-                        ▼                                     ▼
-                ┌──────────────┐                      ┌──────────────┐
-                │   Device A   │                      │   Device B   │
-                │  (Online DB  │◄── 2-Way Auto-Sync ──►  (Online DB  │
-                │ + Offline IDB)                      │ + Offline IDB)
-                └──────────────┘                      └──────────────┘
+
+Use the project URL like this:
+
+```bash
+https://[PROJECT_REF].supabase.co
+```
+
+Use the anon key from the API panel.
+
+---
+
+## 4. Connect GitHub to Vercel
+
+1. Push this repo to GitHub
+2. Open https://vercel.com
+3. Click Add New Project
+4. Import the GitHub repository
+5. Select the repository and confirm the project
+6. Use the framework preset as Vite
+7. Build command:
+
+```bash
+npm run build
+```
+
+8. Output directory:
+
+```bash
+dist
+```
+
+9. Add environment variables in Vercel for Production, Preview, and Development
+
+---
+
+## 5. Add Vercel environment variables
+
+In Vercel dashboard, go to Project → Settings → Environment Variables and add:
+
+```bash
+DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+SQL_SSL=true
+NODE_ENV=production
+VITE_SUPABASE_URL=https://[PROJECT_REF].supabase.co
+VITE_SUPABASE_ANON_KEY=[YOUR_SUPABASE_ANON_KEY]
+VITE_GOOGLE_MAPS_API_KEY=
+VITE_GOOGLE_MAPS_MAP_ID=DEMO_MAP_ID
+```
+
+This project already reads the main database connection from `DATABASE_URL` in [src/db/index.ts](src/db/index.ts).
+
+---
+
+## 6. Local environment setup
+
+Create a local file named `.env.local` from the example in [.env.example](.env.example):
+
+```bash
+DATABASE_URL=postgresql://postgres:[YOUR_PASSWORD]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?sslmode=require
+GEMINI_API_KEY=your_key_here
+NODE_ENV=development
+VITE_SUPABASE_URL=https://[PROJECT_REF].supabase.co
+VITE_SUPABASE_ANON_KEY=[YOUR_SUPABASE_ANON_KEY]
+```
+
+Then run:
+
+```bash
+npm install
+npm run dev
 ```
 
 ---
 
-## 2. Step 1: Set Up Supabase & PostGIS
+## 7. Deploy and verify
 
-### 1. Create a Supabase Project
-1. Go to [https://supabase.com/dashboard](https://supabase.com/dashboard) and log in.
-2. Click **New Project**.
-3. Choose your Organization, name the project (e.g. `hinunangan-swine-registry`), select a region (e.g. `Singapore - ap-southeast-1`), and set a secure **Database Password**.
-4. Click **Create new project** and wait ~2 minutes for it to finish provisioning.
+After deployment, verify these URLs:
+
+```bash
+https://[your-vercel-app].vercel.app/api/health
+https://[your-vercel-app].vercel.app/api/swine-records
+https://[your-vercel-app].vercel.app/api/registry-schema
+```
+
+Expected result: the app should connect to Supabase and return data or an empty success response instead of a database connection error.
+
+If you see a database error, check:
+
+- `DATABASE_URL` is correct
+- the DB password is correct
+- the project is reachable from Vercel
+- the Supabase DB has tables created
+- the connection string includes `?sslmode=require`
 
 ---
 
-### 2. Enable PostGIS & Execute Relational Schema
-1. In the Supabase left sidebar, click on **SQL Editor**.
-2. Click **New query** (+ button).
-3. Paste and run the following relational SQL script:
+## 8. Common fixes
 
-```sql
--- ============================================================================
--- 1. ENABLE POSTGIS EXTENSION
--- ============================================================================
-CREATE EXTENSION IF NOT EXISTS postgis SCHEMA extensions;
-FIX PHILIPPINE CONTACT NUMBER VALIDATION — STRICT 10-DIGIT RULE
+### Problem: Vercel says database connection failed
 
-In the Swine Registry application, completely fix the Contact Number validation so the system consistently uses the Philippine mobile number format:
+Use the direct project connection string from Supabase, not the public website URL.
 
-+63 9125918781
+### Problem: The app works locally but not in Vercel
 
-IMPORTANT RULE:
-- +63 is the fixed country code and is NOT counted.
-- The user must enter EXACTLY 10 digits after +63.
-- The 10 digits MUST start with 9.
-- Valid format example: +63 9125918781
-- Local digits: 9125918781
-- Required regex: ^9\d{9}$
+Usually this means the environment variables were not added to Vercel or the project is using a different database than the one configured in Supabase.
 
-CURRENT PROBLEM:
-The Contact Number field UI already shows 10/10 and accepts a 10-digit number, but when clicking SAVE, the application/Supabase save process still rejects the number using an OLD 11-digit validation rule.
+### Problem: App loads but API routes fail
 
-Example error currently appearing:
-"Contact number must contain exactly 10 digits after +63 (e.g. 9171234567)."
+Check that Vercel build command and output folder are correctly set:
 
-Remove all remaining old 11-digit validation logic from the save process.
+- Build command: `npm run build`
+- Output directory: `dist`
 
-APPLY THE FIX EVERYWHERE:
+---
 
-1. CONTACT NUMBER INPUT
-- Display a fixed +63 prefix.
-- User enters only the 10 local digits.
-- Maximum length = 10.
-- Do not count +63 as part of the 10 digits.
-- Show `10/10` when complete.
-- Valid number example:
-  +63 9125918781
+## 9. Recommended final setup
 
-2. FRONTEND VALIDATION
-Use this rule everywhere:
-```ts
-const contactDigits = value.replace(/\D/g, '');
-const valid =
-  contactDigits.length === 10 &&
-  /^9\d{9}$/.test(contactDigits);
--- ============================================================================
--- 2. USERS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS public.users (
-  id SERIAL PRIMARY KEY,
-  uid TEXT NOT NULL UNIQUE,
-  email TEXT NOT NULL UNIQUE,
-  name TEXT,
-  role TEXT NOT NULL DEFAULT 'focal',
-  assigned_barangay TEXT,
-  phone TEXT,
-  password TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+This is the cleanest production setup:
 
-CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role);
-CREATE INDEX IF NOT EXISTS idx_users_barangay ON public.users(assigned_barangay);
+- GitHub repo = source of truth
+- Supabase = PostgreSQL + PostGIS database
+- Vercel = frontend and serverless API host
+- Environment variables = stored in Vercel
 
--- ============================================================================
--- 3. SWINE RECORDS TABLE (Relational Core with PostGIS Point & JSONB Schema)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS public.swine_records (
-  id TEXT PRIMARY KEY,
-  computed_pig_id TEXT NOT NULL UNIQUE,
-  pig_id_tag TEXT,
-  ear_tag_no TEXT,
-  farmer_name TEXT NOT NULL,
-  farm_name TEXT,
-  farmer_contact TEXT,
-  barangay TEXT NOT NULL,
-  birth_date TEXT,
-  age_days INTEGER,
-  age_months TEXT,
-  estimated_weight_kg TEXT,
-  actual_weight_kg TEXT,
-  swine_type TEXT NOT NULL DEFAULT 'FATTER_GROWER',
-  farm_scale TEXT NOT NULL DEFAULT 'BACKYARD',
-  asf_zone TEXT NOT NULL DEFAULT 'RED',
-  biosecurity_warning BOOLEAN NOT NULL DEFAULT false,
-  status TEXT NOT NULL DEFAULT 'HEALTHY',
-  ready_to_sell BOOLEAN NOT NULL DEFAULT false,
-  price_estimate TEXT,
-  photo_url TEXT,
-  is_archived BOOLEAN NOT NULL DEFAULT false,
-  registered_at TEXT NOT NULL,
-  -- PostGIS location geometry for precision GIS mapping
-  location geometry(Point, 4326),
-  -- JSONB for admin-created dynamic registry fields
-  custom_fields JSONB DEFAULT '{}'::jsonb,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+Once this is connected, every push to GitHub can trigger a Vercel deployment automatically.
 
--- Safely add location and custom_fields if the table already existed previously
-ALTER TABLE public.swine_records 
-  ADD COLUMN IF NOT EXISTS location geometry(Point, 4326);
+---
 
-ALTER TABLE public.swine_records 
-  ADD COLUMN IF NOT EXISTS custom_fields JSONB DEFAULT '{}'::jsonb;
+## 10. Final deployment checklist
 
-CREATE INDEX IF NOT EXISTS idx_swine_barangay ON public.swine_records(barangay);
-CREATE INDEX IF NOT EXISTS idx_swine_status ON public.swine_records(status);
-CREATE INDEX IF NOT EXISTS idx_swine_ready_to_sell ON public.swine_records(ready_to_sell);
-CREATE INDEX IF NOT EXISTS idx_swine_custom_fields ON public.swine_records USING gin (custom_fields);
-CREATE INDEX IF NOT EXISTS idx_swine_location ON public.swine_records USING gist (location);
+- [ ] GitHub repo is pushed
+- [ ] Supabase project is created
+- [ ] SQL schema is executed
+- [ ] Supabase database URL copied
+- [ ] Vercel project connected to GitHub
+- [ ] `DATABASE_URL` added in Vercel
+- [ ] `VITE_SUPABASE_URL` added in Vercel
+- [ ] `VITE_SUPABASE_ANON_KEY` added in Vercel
+- [ ] app deployed successfully
+- [ ] `/api/health` returns `status: ok`
 
--- ============================================================================
--- 4. ISSUED CERTIFICATES TABLE (Relational Foreign Key to Swine Records)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS public.issued_certificates (
-  id TEXT PRIMARY KEY,
-  control_number TEXT NOT NULL UNIQUE,
-  swine_id TEXT REFERENCES public.swine_records(id) ON DELETE SET NULL,
-  farmer_name TEXT NOT NULL,
-  barangay TEXT NOT NULL,
-  issue_date TEXT NOT NULL,
-  purpose TEXT NOT NULL,
-  destination TEXT,
-  inspected_by TEXT NOT NULL,
-  qr_payload TEXT,
-  valid_until TEXT,
-  status TEXT NOT NULL DEFAULT 'VALID',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_cert_swine_id ON public.issued_certificates(swine_id);
-CREATE INDEX IF NOT EXISTS idx_cert_control_number ON public.issued_certificates(control_number);
-
--- ============================================================================
--- 5. MESSAGES TABLE (Relational Communication Channel)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS public.messages (
-  id TEXT PRIMARY KEY,
-  sender_id TEXT NOT NULL,
-  sender_name TEXT NOT NULL,
-  sender_role TEXT NOT NULL DEFAULT 'focal',
-  receiver_id TEXT,
-  receiver_role TEXT,
-  barangay TEXT,
-  text TEXT NOT NULL,
-  attachments JSONB DEFAULT '[]'::jsonb,
-  is_read BOOLEAN NOT NULL DEFAULT false,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_barangay ON public.messages(barangay);
-CREATE INDEX IF NOT EXISTS idx_messages_is_read ON public.messages(is_read);
-
--- ============================================================================
--- 6. MEDIA FILES TABLE (Uploads & Persistent Imagery)
--- ============================================================================
-CREATE TABLE IF NOT EXISTS public.media_files (
-  id TEXT PRIMARY KEY,
-  file_name TEXT NOT NULL,
-  file_path TEXT,
-  file_url TEXT NOT NULL,
+If you want, I can also help you do the exact final setup for your own Supabase project by writing the exact values you need to paste into Vercel step by step.
   mime_type TEXT,
   file_size INTEGER,
   category TEXT NOT NULL DEFAULT 'OTHER',
