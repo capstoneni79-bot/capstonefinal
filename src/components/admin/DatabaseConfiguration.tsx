@@ -23,16 +23,16 @@ import { storageService } from '../../services/storageService';
 export const DatabaseConfiguration: React.FC = () => {
   const [connectionString, setConnectionString] = useState('');
   const [dbHost, setDbHost] = useState(() => {
-    return localStorage.getItem('da_db_host') || 'db.wuxivpxsnixabfvlunvg.supabase.co';
+    return localStorage.getItem('da_db_host') || 'aws-0-ap-southeast-1.pooler.supabase.com';
   });
   const [dbPort, setDbPort] = useState(() => {
-    return localStorage.getItem('da_db_port') || '5432';
+    return localStorage.getItem('da_db_port') || '6543';
   });
   const [dbName, setDbName] = useState(() => {
     return localStorage.getItem('da_db_name') || 'postgres';
   });
   const [dbUser, setDbUser] = useState(() => {
-    return localStorage.getItem('da_db_user') || 'postgres';
+    return localStorage.getItem('da_db_user') || 'postgres.wuxivpxsnixabfvlunvg';
   });
   const [dbPassword, setDbPassword] = useState('');
   const [dbSsl, setDbSsl] = useState(() => {
@@ -223,7 +223,7 @@ export const DatabaseConfiguration: React.FC = () => {
               <span>PostgreSQL & Cloud Database Configuration</span>
             </h1>
             <p className="text-xs sm:text-sm text-emerald-200/80 max-w-2xl leading-relaxed">
-              Manage your direct PostgreSQL / Supabase connection string. All additions and edits will record directly to your cloud database.
+              Test a Supabase pooler connection. For persistent production access, set DATABASE_URL in Vercel Project Settings and redeploy.
             </p>
           </div>
 
@@ -291,17 +291,17 @@ export const DatabaseConfiguration: React.FC = () => {
             <div>
               <label className="block text-[11px] font-bold text-stone-700 mb-1 flex items-center justify-between">
                 <span>PostgreSQL Connection URI (DATABASE_URL)</span>
-                <span className="text-[10px] font-normal text-stone-400">Direct or Pooler</span>
+                <span className="text-[10px] font-normal text-stone-400">Transaction Pooler</span>
               </label>
               <textarea
                 rows={2}
                 value={connectionString}
                 onChange={e => parseAndApplyUri(e.target.value)}
-                placeholder="postgresql://postgres:password@db.wuxivpxsnixabfvlunvg.supabase.co:5432/postgres"
+                placeholder="postgresql://postgres.[PROJECT-REF]:[DB-PASSWORD]@[POOLER-HOST]:6543/postgres?sslmode=require"
                 className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden resize-none"
               />
               <p className="text-[10px] text-stone-500 mt-1">
-                Tip: Paste your full Supabase connection string here. The fields below will automatically adapt.
+                Use the Transaction Pooler URI from Supabase Project Settings &gt; Database. Avoid the direct Supabase database hostname on Vercel.
               </p>
             </div>
 
@@ -319,7 +319,7 @@ export const DatabaseConfiguration: React.FC = () => {
                     setDbHost(e.target.value);
                   }
                 }}
-                placeholder="db.wuxivpxsnixabfvlunvg.supabase.co"
+                placeholder="aws-0-ap-southeast-1.pooler.supabase.com"
                 className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
               />
             </div>
