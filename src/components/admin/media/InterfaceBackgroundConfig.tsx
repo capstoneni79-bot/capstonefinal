@@ -98,7 +98,7 @@ export const InterfaceBackgroundConfig: React.FC<InterfaceBackgroundConfigProps>
     };
   }, []);
 
-  // Handle local device file reading with high-res web compression
+  // Upload the selected image to the production backend/Supabase Storage and keep the permanent URL.
   const handleDeviceFileSelect = async (file: File) => {
     if (!file) return;
 
@@ -108,30 +108,14 @@ export const InterfaceBackgroundConfig: React.FC<InterfaceBackgroundConfigProps>
     }
 
     try {
-      const result = await compressImageFile(file, {
-        maxWidth: 1920,
-        maxHeight: 1080,
-        quality: 0.82,
-      });
-
-      if (result && result.dataUrl) {
-        setImageUrl(result.dataUrl);
-        showToast(`Loaded & optimized ${file.name} (${result.sizeStr})`, 'info');
+      const uploaded = await landingCmsService.uploadAsset(file, 'backgrounds');
+      if (uploaded?.fileUrl) {
+        setImageUrl(uploaded.fileUrl);
+        showToast(`Uploaded ${file.name} to the shared media library.`, 'success');
       }
     } catch (err) {
-      console.error('Background compression error:', err);
-      const reader = new FileReader();
-      reader.onload = e => {
-        const dataUrl = e.target?.result as string;
-        if (dataUrl) {
-          setImageUrl(dataUrl);
-          showToast(`Loaded ${file.name} from device`, 'info');
-        }
-      };
-      reader.onerror = () => {
-        showToast('Failed to read background image from device.', 'warn');
-      };
-      reader.readAsDataURL(file);
+      console.error('Background upload error:', err);
+      showToast(err instanceof Error ? err.message : 'Failed to upload background image.', 'warn');
     }
   };
 
@@ -155,28 +139,35 @@ export const InterfaceBackgroundConfig: React.FC<InterfaceBackgroundConfigProps>
   };
 
   // Save Background to CMS and storage
-  const handleSaveBackground = () => {
-    const draft = landingCmsService.getDraftConfig();
-    const updatedBg = {
-      imageUrl,
-      brightness,
-      overlayOpacity,
-      overlayColor,
-      blur,
-      position,
-      fit,
-      scale: 100,
-      useSameForAllDevices: true,
-      enabled: Boolean(imageUrl && imageUrl.trim() !== ''),
-    };
+  const handleSaveBackground = async () => {
+    try {
+      const draft = landingCmsService.getDraftConfig();
+      const updatedBg = {
+        imageUrl,
+        brightness,
+        overlayOpacity,
+        overlayColor,
+        blur,
+        position,
+        fit,
+        scale: 100,
+        useSameForAllDevices: true,
+        enabled: Boolean(imageUrl && imageUrl.trim() !== ''),
+      };
 
-    draft.interfaceBackground = updatedBg;
-    landingCmsService.saveDraft(draft);
-    landingCmsService.publish(draft);
-    setConfig(draft);
+      const nextConfig = {
+        ...draft,
+        interfaceBackground: updatedBg,
+      };
 
-    showToast('Interface background saved and applied across the public portal!', 'success');
-    if (onSaved) onSaved();
+      const published = await landingCmsService.publish(nextConfig);
+      setConfig(published);
+      showToast('Interface background saved and published to the public website.', 'success');
+      if (onSaved) onSaved();
+    } catch (err) {
+      console.error('Background save failed:', err);
+      showToast(err instanceof Error ? err.message : 'Unable to save background configuration.', 'warn');
+    }
   };
 
   // Reset to default

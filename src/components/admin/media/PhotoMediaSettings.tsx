@@ -134,12 +134,17 @@ export const PhotoMediaSettings: React.FC<PhotoMediaSettingsProps> = ({
     });
   };
 
-  const handlePublishAll = () => {
-    const pub = landingCmsService.publish(config);
-    setPublishedConfig(pub);
-    setConfig(pub);
-    showToast('All photo & media settings published live to public website!', 'success');
-    if (onRefresh) onRefresh();
+  const handlePublishAll = async () => {
+    try {
+      const pub = await landingCmsService.publish(config);
+      setPublishedConfig(pub);
+      setConfig(pub);
+      showToast('All photo & media settings published live to public website!', 'success');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Photo media publish failed:', err);
+      showToast(err instanceof Error ? err.message : 'Unable to publish photo media settings.', 'warn');
+    }
   };
 
   // Upload Form State

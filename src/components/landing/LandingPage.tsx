@@ -66,9 +66,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   );
 
   useEffect(() => {
+    const loadLiveConfig = async () => {
+      try {
+        const next = await landingCmsService.loadPublishedConfig();
+        setPublishedConfig(next);
+      } catch (error) {
+        console.warn('Unable to refresh landing page config from server:', error);
+      }
+    };
+
     const handleUpdate = () => {
       setPublishedConfig(landingCmsService.getPublishedConfig());
     };
+
+    loadLiveConfig();
     window.addEventListener('da_landing_cms_updated', handleUpdate);
     return () => window.removeEventListener('da_landing_cms_updated', handleUpdate);
   }, []);

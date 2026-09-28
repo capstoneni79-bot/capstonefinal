@@ -504,12 +504,17 @@ export const LogoConfiguration: React.FC<LogoConfigurationProps> = ({
   };
 
   // Reset ALL logos to default
-  const handleResetAllToDefault = () => {
-    const fresh = landingCmsService.restoreDefaults();
-    setConfig(fresh);
-    setIsResetConfirmOpen(false);
-    showToast('All logos reset to original government defaults.', 'success');
-    if (onSaved) onSaved();
+  const handleResetAllToDefault = async () => {
+    try {
+      const fresh = await landingCmsService.restoreDefaults();
+      setConfig(fresh);
+      setIsResetConfirmOpen(false);
+      showToast('All logos reset to original government defaults.', 'success');
+      if (onSaved) onSaved();
+    } catch (err) {
+      console.error('Reset all logos failed:', err);
+      showToast(err instanceof Error ? err.message : 'Unable to reset all logos.', 'warn');
+    }
   };
 
   // Filtered logo list

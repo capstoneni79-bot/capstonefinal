@@ -153,33 +153,55 @@ export const ManageLandingPage: React.FC<ManageLandingPageProps> = ({
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const handleSaveDraft = () => {
-    landingCmsService.saveDraft(config);
-    showToast('Draft changes saved locally!', 'info');
+  const handleSaveDraft = async () => {
+    try {
+      const saved = await landingCmsService.saveDraft(config);
+      setConfig(saved);
+      showToast('Draft changes saved to the production configuration.', 'info');
+    } catch (err) {
+      console.error('Draft save failed:', err);
+      showToast(err instanceof Error ? err.message : 'Unable to save landing page draft.', 'info');
+    }
   };
 
-  const handlePublish = () => {
-    const published = landingCmsService.publish(config);
-    setPublishedConfig(published);
-    setConfig(published);
-    showToast('Website published live successfully! Changes are now public.', 'success');
-    if (onRefresh) onRefresh();
-  };
-
-  const handleResetDraft = () => {
-    const pub = landingCmsService.resetDraft();
-    setConfig(pub);
-    showToast('Draft changes discarded. Reverted to published state.', 'info');
-    setIsResetConfirmOpen(false);
-  };
-
-  const handleRestoreDefaults = () => {
-    if (window.confirm('Restore all landing page settings to factory defaults? This will reset all photos and custom text.')) {
-      const defaults = landingCmsService.restoreDefaults();
-      setPublishedConfig(defaults);
-      setConfig(defaults);
-      showToast('Restored all landing page settings to system defaults.', 'info');
+  const handlePublish = async () => {
+    try {
+      const published = await landingCmsService.publish(config);
+      setPublishedConfig(published);
+      setConfig(published);
+      showToast('Website published live successfully! Changes are now public.', 'success');
       if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Publish failed:', err);
+      showToast(err instanceof Error ? err.message : 'Unable to publish landing page configuration.', 'info');
+    }
+  };
+
+  const handleResetDraft = async () => {
+    try {
+      const pub = await landingCmsService.resetDraft();
+      setConfig(pub);
+      setPublishedConfig(pub);
+      showToast('Draft changes discarded. Reverted to published state.', 'info');
+      setIsResetConfirmOpen(false);
+    } catch (err) {
+      console.error('Reset draft failed:', err);
+      showToast(err instanceof Error ? err.message : 'Unable to reset landing page draft.', 'info');
+    }
+  };
+
+  const handleRestoreDefaults = async () => {
+    if (window.confirm('Restore all landing page settings to factory defaults? This will reset all photos and custom text.')) {
+      try {
+        const defaults = await landingCmsService.restoreDefaults();
+        setPublishedConfig(defaults);
+        setConfig(defaults);
+        showToast('Restored all landing page settings to system defaults.', 'info');
+        if (onRefresh) onRefresh();
+      } catch (err) {
+        console.error('Restore defaults failed:', err);
+        showToast(err instanceof Error ? err.message : 'Unable to restore landing page defaults.', 'info');
+      }
     }
   };
 
