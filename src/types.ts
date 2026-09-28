@@ -846,7 +846,7 @@ export interface SwineImportHistoryRecord {
   createdCount: number;
   skippedCount: number;
   newFieldsCreated: string[];
-  status: 'completed' | 'partial' | 'failed' | 'rolled_back';
+  status: 'completed' | 'partial' | 'failed' | 'rolled_back' | 'pending_sync';
   duplicateHandling: 'update' | 'skip' | 'rename';
   errorSummary?: { row: number; pigId?: string; error: string; field?: string }[];
   recordIds: string[];

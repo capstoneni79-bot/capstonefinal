@@ -45,6 +45,7 @@ import {
   UserAccount,
 } from '../../types';
 import { storageService } from '../../services/storageService';
+import { offlineSyncEngine } from '../../services/offlineSyncEngine';
 import { languageService } from '../../services/languageService';
 import {
   analyzeImportColumns,
@@ -555,22 +556,25 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
       });
 
       setImportProgress(65);
-      setImportStatusMsg(`Persisting ${recordsToImport.length} records to database and local store...`);
+      setImportStatusMsg(`Saving ${recordsToImport.length} records...`);
 
-      // 3. Batch Save Records via API / Local Store
-      const currentAllSwine = storageService.getSwineRecords();
-      const swineMap = new Map<string, SwineRecord>();
-      currentAllSwine.forEach(s => swineMap.set(s.id, s));
+      // 3. Persist to PostgreSQL online, or queue each row for explicit offline sync.
+      const offline = storageService.isEffectiveOffline();
+      let savedRecords = recordsToImport;
+      let importStatus: SwineImportHistoryRecord['status'] = 'completed';
 
-      recordsToImport.forEach(rec => {
-        swineMap.set(rec.id, rec);
-      });
-
-      const finalAllSwine = Array.from(swineMap.values());
-      storageService.saveSwineRecords(finalAllSwine);
-
-      // Attempt API Batch Sync to Cloud SQL PostgreSQL
-      try {
+      if (offline) {
+        const existingIds = new Set(existingRecords.map(record => record.id));
+        for (const record of recordsToImport) {
+          if (existingIds.has(record.id)) {
+            await offlineSyncEngine.queueSwineUpdate(record);
+          } else {
+            await offlineSyncEngine.queueSwineCreate(record);
+          }
+        }
+        importStatus = 'pending_sync';
+        setImportStatusMsg(`${recordsToImport.length} records queued locally and pending sync.`);
+      } else {
         const res = await fetch('/api/swine-records/import', {
           method: 'POST',
           headers: {
@@ -589,11 +593,19 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
           }),
         });
 
-        if (!res.ok) {
-          console.warn('Backend batch import notice, records saved locally:', await res.text());
+        const result = await res.json().catch(() => null);
+        if (!res.ok || !result?.success || !Array.isArray(result.data)) {
+          throw new Error(result?.error || `Cloud import failed (HTTP ${res.status}).`);
         }
-      } catch (e) {
-        console.warn('Backend API unreachable, records stored in offline IndexedDB engine:', e);
+
+        savedRecords = result.data;
+        if (savedRecords.length !== recordsToImport.length) {
+          throw new Error(`Cloud import returned ${savedRecords.length} of ${recordsToImport.length} saved records.`);
+        }
+
+        const swineMap = new Map(storageService.getSwineRecords().map(record => [record.id, record]));
+        savedRecords.forEach((record: SwineRecord) => swineMap.set(record.id, { ...record, isSynced: true }));
+        storageService.saveSwineRecords(Array.from(swineMap.values()));
       }
 
       // 4. Create Swine Import History Record
@@ -608,13 +620,13 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
         importedByRole: currentUser?.role || 'admin',
         importedAt: new Date().toISOString(),
         totalRows: rawRows.length,
-        successfulCount: recordsToImport.length,
+        successfulCount: savedRecords.length,
         failedCount: skippedCount,
         updatedCount,
         createdCount,
         skippedCount,
         newFieldsCreated: newFieldMappings.map(m => m.targetFieldKey),
-        status: skippedCount === 0 ? 'completed' : 'partial',
+        status: importStatus === 'pending_sync' ? 'pending_sync' : skippedCount === 0 ? 'completed' : 'partial',
         duplicateHandling,
         recordIds: recordsToImport.map(r => r.id),
         createdFieldKeys: newFieldMappings.map(m => m.targetFieldKey),
@@ -640,11 +652,11 @@ export const ImportSwineModal: React.FC<ImportSwineModalProps> = ({
         skipped: skippedCount,
         newFieldsCount: newFieldMappings.length,
       });
-      setImportStatusMsg('Import completed successfully!');
+      setImportStatusMsg(importStatus === 'pending_sync' ? 'Import queued and pending sync.' : 'Import saved to the cloud successfully.');
       setCurrentStep('completed');
 
       // Trigger Parent Success Callback
-      onSuccess(recordsToImport.length);
+      onSuccess(savedRecords.length);
     } catch (err: any) {
       console.error('Import execution failed:', err);
       setFileReadError(err.message || 'An unexpected error occurred during database import.');
