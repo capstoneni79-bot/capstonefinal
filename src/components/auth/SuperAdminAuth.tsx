@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { UserAccount } from '../../types';
 import { storageService } from '../../services/storageService';
+import { authApi } from '../../services/api';
 import { useOfficialLogos } from '../common/OfficialSeals';
 
 interface SuperAdminAuthProps {
@@ -39,51 +40,25 @@ export const SuperAdminAuth: React.FC<SuperAdminAuthProps> = ({
     logos['logo-da'] ||
     '/icon.svg';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setIsLoading(true);
 
-    setTimeout(() => {
-      const q = usernameOrEmail.trim().toLowerCase();
-      const pwd = password.trim();
-
-      const accounts = storageService.getAccounts();
-
-      // Find user in accounts
-      const matched = accounts.find(
-        a =>
-          a.username.toLowerCase() === q ||
-          a.email.toLowerCase() === q
-      );
-
-      if (!matched) {
-        setErrorMsg('Invalid Super Administrator credentials. Access Denied.');
-        setIsLoading(false);
+    try {
+      const result = await authApi.login(usernameOrEmail.trim(), password);
+      if (result.role !== 'super_admin' || result.user.role !== 'super_admin') {
+        setErrorMsg('Access Denied: This account does not possess Super Administrator privileges.');
         return;
       }
 
-      // Check strictly for super_admin role
-      if (matched.role !== 'super_admin') {
-        setErrorMsg(
-          'Access Denied: This account does not possess Super Administrator privileges.'
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      // Check password
-      if (!matched.password || matched.password !== pwd) {
-        setErrorMsg('Invalid master security password.');
-        setIsLoading(false);
-        return;
-      }
-
-      // Successful Super Admin authentication
-      storageService.setCurrentUser(matched);
-      onSuccess(matched);
+      storageService.setCurrentUser(result.user);
+      onSuccess(result.user);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Invalid Super Administrator credentials. Access Denied.');
+    } finally {
       setIsLoading(false);
-    }, 300);
+    }
   };
 
   return (

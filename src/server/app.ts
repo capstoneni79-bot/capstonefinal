@@ -201,7 +201,7 @@ export function createApp() {
         return res.status(401).json({ success: false, error: 'Invalid username or password.' });
       }
 
-      if (user.password && user.password !== password.trim()) {
+      if (!user.password || user.password !== password.trim()) {
         return res.status(401).json({ success: false, error: 'Invalid username or password.' });
       }
 
