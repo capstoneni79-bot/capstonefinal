@@ -8,6 +8,7 @@ import {
   SwineRecord,
   UserAccount,
 } from '../types.ts';
+import type { LandingCmsConfig } from '../types/landingCms.ts';
 import { storageService } from './storageService.ts';
 
 function getAuthHeaders(): Record<string, string> {
@@ -265,6 +266,75 @@ export const mediaApi = {
 };
 
 export const settingsApi = {
+  async getPublishedLandingCms(): Promise<LandingCmsConfig> {
+    const res = await fetch('/api/landing-cms/published', { cache: 'no-store' });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data.config) {
+      throw new Error(data?.error || 'Unable to load published landing page configuration.');
+    }
+    return data.config;
+  },
+
+  async getLandingCmsDraft(): Promise<LandingCmsConfig> {
+    const res = await fetch('/api/admin/landing-cms/draft', { headers: getAuthHeaders(), cache: 'no-store' });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data.config) {
+      throw new Error(data?.error || 'Unable to load landing page draft.');
+    }
+    return data.config;
+  },
+
+  async saveLandingCmsDraft(config: LandingCmsConfig): Promise<LandingCmsConfig> {
+    const res = await fetch('/api/admin/landing-cms/draft', {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(config),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data.config) {
+      throw new Error(data?.error || 'Unable to save landing page draft.');
+    }
+    return data.config;
+  },
+
+  async publishLandingCms(config: LandingCmsConfig): Promise<LandingCmsConfig> {
+    const res = await fetch('/api/admin/landing-cms/publish', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(config),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data.config) {
+      throw new Error(data?.error || 'Unable to publish landing page configuration.');
+    }
+    return data.config;
+  },
+
+  async uploadLandingCmsAsset(file: File, category: string): Promise<{
+    filePath: string;
+    fileUrl: string;
+    fileSize: number;
+    fileName: string;
+    mimeType: string;
+  }> {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('Unable to read selected file.'));
+      reader.onerror = () => reject(new Error('Unable to read selected file.'));
+      reader.readAsDataURL(file);
+    });
+    const res = await fetch('/api/admin/landing-cms/upload', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ fileName: file.name, mimeType: file.type, base64, category }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success || !data.fileUrl || !data.filePath) {
+      throw new Error(data?.error || 'Unable to upload landing page media.');
+    }
+    return data;
+  },
+
   async getLandingConfig(): Promise<any> {
     const res = await fetch('/api/landing-config', {
       method: 'GET',

@@ -25,6 +25,8 @@ import {
 import { DEFAULT_SIDEBAR_THEME, INITIAL_REGISTRY_FORM_SCHEMA } from '../data/initialFormSchema.ts';
 import { INITIAL_LANDING_CONFIG } from '../data/initialData.ts';
 import { DEFAULT_MASTER_CONFIG } from '../data/defaultMasterConfig.ts';
+import { INITIAL_LANDING_CMS_CONFIG } from '../data/initialLandingCmsData.ts';
+import { uploadLandingCmsAsset } from './supabaseStorage.ts';
 import { interpretSuperAdminConfigCommand } from '../utils/configCommandInterpreter.ts';
 import { isValidPhilippinePhoneNumber, normalizePhilippinePhoneNumber } from '../utils/registryFieldUtils.ts';
 
@@ -1279,6 +1281,107 @@ export function createApp() {
       return res.json({ success: true, theme });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: 'Failed to update sidebar theme in database.' });
+    }
+  });
+
+  const LANDING_CMS_CONFIG_KEY = 'landing_cms_configuration_v1';
+
+  app.get('/api/landing-cms/published', async (_req, res) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    try {
+      const stored = await getSystemSetting<any>(LANDING_CMS_CONFIG_KEY);
+      return res.json({
+        success: true,
+        config: stored?.published || INITIAL_LANDING_CMS_CONFIG,
+      });
+    } catch (err: any) {
+      console.error('LANDING_CMS_CONFIG_LOAD failed:', err?.message || 'Unknown database error');
+      return res.status(500).json({ success: false, error: 'Unable to load published landing page configuration.' });
+    }
+  });
+
+  app.get('/api/admin/landing-cms/draft', async (req, res) => {
+    const admin = getUserSecurityContext(req);
+    if (!admin.isSuperAdmin) {
+      return res.status(403).json({ success: false, error: 'You do not have permission to access landing page drafts.' });
+    }
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    try {
+      const stored = await getSystemSetting<any>(LANDING_CMS_CONFIG_KEY);
+      return res.json({
+        success: true,
+        config: stored?.draft || stored?.published || INITIAL_LANDING_CMS_CONFIG,
+      });
+    } catch (err: any) {
+      console.error('LANDING_CMS_DRAFT_LOAD failed:', err?.message || 'Unknown database error');
+      return res.status(500).json({ success: false, error: 'Unable to load landing page draft.' });
+    }
+  });
+
+  app.put('/api/admin/landing-cms/draft', async (req, res) => {
+    const admin = getUserSecurityContext(req);
+    if (!admin.isSuperAdmin) {
+      return res.status(403).json({ success: false, error: 'You do not have permission to save landing page drafts.' });
+    }
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ success: false, error: 'A valid landing page configuration is required.' });
+    }
+    try {
+      const stored = await getSystemSetting<any>(LANDING_CMS_CONFIG_KEY);
+      const config = { ...req.body, status: 'draft', lastUpdated: new Date().toISOString() };
+      await setSystemSetting(LANDING_CMS_CONFIG_KEY, {
+        published: stored?.published || INITIAL_LANDING_CMS_CONFIG,
+        draft: config,
+      });
+      console.info('LANDING_CMS_CONFIG_SAVE success:', { updatedBy: admin.userId || admin.username, timestamp: new Date().toISOString() });
+      return res.json({ success: true, config });
+    } catch (err: any) {
+      console.error('LANDING_CMS_CONFIG_SAVE failed:', err?.message || 'Unknown database error');
+      return res.status(500).json({ success: false, error: 'Unable to save landing page draft.' });
+    }
+  });
+
+  app.post('/api/admin/landing-cms/publish', async (req, res) => {
+    const admin = getUserSecurityContext(req);
+    if (!admin.isSuperAdmin) {
+      return res.status(403).json({ success: false, error: 'You do not have permission to publish landing page configuration.' });
+    }
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ success: false, error: 'A valid landing page configuration is required.' });
+    }
+    try {
+      const config = {
+        ...req.body,
+        status: 'published',
+        lastUpdated: new Date().toISOString(),
+        updatedBy: admin.username,
+      };
+      await setSystemSetting(LANDING_CMS_CONFIG_KEY, { published: config, draft: config });
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      console.info('LANDING_CMS_CONFIG_PUBLISH success:', { updatedBy: admin.userId || admin.username, timestamp: new Date().toISOString() });
+      return res.json({ success: true, config });
+    } catch (err: any) {
+      console.error('LANDING_CMS_CONFIG_PUBLISH failed:', err?.message || 'Unknown database error');
+      return res.status(500).json({ success: false, error: 'Unable to publish landing page configuration.' });
+    }
+  });
+
+  app.post('/api/admin/landing-cms/upload', async (req, res) => {
+    const admin = getUserSecurityContext(req);
+    if (!admin.isSuperAdmin) {
+      return res.status(403).json({ success: false, error: 'You do not have permission to upload landing page media.' });
+    }
+    const { fileName, mimeType, base64, category } = req.body || {};
+    if (typeof base64 !== 'string' || !base64 || typeof fileName !== 'string') {
+      return res.status(400).json({ success: false, error: 'A file name and image payload are required.' });
+    }
+    try {
+      const uploaded = await uploadLandingCmsAsset(fileName, mimeType || 'application/octet-stream', base64, category || 'backgrounds');
+      console.info('LANDING_CMS_IMAGE_UPLOAD success:', { storagePath: uploaded.filePath, timestamp: new Date().toISOString() });
+      return res.status(201).json({ success: true, ...uploaded, fileName, mimeType: mimeType || 'application/octet-stream' });
+    } catch (err: any) {
+      console.error('LANDING_CMS_IMAGE_UPLOAD failed:', err?.message || 'Unknown storage error');
+      return res.status(500).json({ success: false, error: err?.message || 'Unable to upload landing page media.' });
     }
   });
 

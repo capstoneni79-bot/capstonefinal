@@ -33,6 +33,8 @@ export interface MediaItem {
   name?: string;
   fileName?: string;
   url: string;
+  storagePath?: string;
+  mimeType?: string;
   category: MediaCategory;
   fileSize: string;
   fileType?: string;
@@ -288,6 +290,7 @@ export type LandingSectionItem = PageSectionItem;
 
 export interface BackgroundPhotoConfig {
   imageUrl: string;
+  storagePath?: string;
   brightness: number; // 0 to 200, 100 = default
   overlayOpacity: number; // 0 to 100
   overlayColor: string;
