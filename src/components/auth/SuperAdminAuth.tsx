@@ -57,25 +57,6 @@ export const SuperAdminAuth: React.FC<SuperAdminAuthProps> = ({
           a.email.toLowerCase() === q
       );
 
-      // Verify credentials & check for superadmin fallback
-      if (
-        (q === 'superadmin' || q === 'super_admin') &&
-        (pwd === 'admin' || pwd === 'admin123' || pwd === 'superadmin')
-      ) {
-        const fallbackSuperAdmin: UserAccount = {
-          id: 'usr-superadmin-1',
-          username: 'superadmin',
-          name: 'DA Regional / Municipal Super Admin',
-          email: 'superadmin@hinunangan.da.gov.ph',
-          role: 'super_admin',
-          createdAt: new Date().toISOString(),
-        };
-        storageService.setCurrentUser(fallbackSuperAdmin);
-        onSuccess(fallbackSuperAdmin);
-        setIsLoading(false);
-        return;
-      }
-
       if (!matched) {
         setErrorMsg('Invalid Super Administrator credentials. Access Denied.');
         setIsLoading(false);
@@ -92,8 +73,7 @@ export const SuperAdminAuth: React.FC<SuperAdminAuthProps> = ({
       }
 
       // Check password
-      const validPasswords = [matched.password, 'admin', 'admin123'].filter(Boolean);
-      if (matched.password && !validPasswords.includes(pwd)) {
+      if (!matched.password || matched.password !== pwd) {
         setErrorMsg('Invalid master security password.');
         setIsLoading(false);
         return;

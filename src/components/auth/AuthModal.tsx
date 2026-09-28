@@ -107,25 +107,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           a.email.toLowerCase() === q
       );
 
-      // Pre-configured fallback demo credentials
-      if (
-        (q === 'superadmin' || q === 'super_admin') &&
-        (pwd === 'admin' || pwd === 'admin123' || pwd === 'superadmin')
-      ) {
-        const fallbackSuperAdmin: UserAccount = {
-          id: 'usr-superadmin-1',
-          username: 'superadmin',
-          name: 'DA Regional / Municipal Super Admin',
-          email: 'superadmin@hinunangan.da.gov.ph',
-          role: 'super_admin',
-          createdAt: new Date().toISOString(),
-        };
-        storageService.setCurrentUser(fallbackSuperAdmin);
-        onLoginSuccess(fallbackSuperAdmin);
-        setIsLoading(false);
-        return;
-      }
-
       if (q === 'admin' && (pwd === 'admin' || pwd === 'admin123')) {
         const fallbackAdmin: UserAccount = {
           id: 'usr-admin-1',
@@ -176,6 +157,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (!matched) {
         setErrorMsg('No registered account found with this username or official email.');
+        setIsLoading(false);
+        return;
+      }
+
+      if (matched.role === 'super_admin') {
+        setErrorMsg('Super Admin accounts must sign in through the dedicated /superadmin route.');
         setIsLoading(false);
         return;
       }
