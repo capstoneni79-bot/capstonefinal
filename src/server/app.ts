@@ -38,46 +38,6 @@ export function createApp() {
       : undefined;
   };
 
-  const sanitizeDatabaseDiagnostic = (value: unknown): string => String(value ?? '')
-    .replace(/(postgres(?:ql)?:\/\/)[^\s/@]+@/gi, '$1[REDACTED]@')
-    .replace(/\b(password|service[_ -]?key|api[_ -]?key|jwt|authorization|cookie)\s*[:=]\s*([^\s,;]+)/gi, '$1=[REDACTED]')
-    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [REDACTED]');
-
-  const getSwineDatabaseError = (error: any, operation: string) => {
-    const causes: any[] = [];
-    let current = error;
-    while (current && causes.length < 5) {
-      causes.push(current);
-      current = current.cause;
-    }
-
-    const rawCode = causes
-      .map(cause => cause?.code)
-      .find(code => typeof code === 'string' && code && code !== 'UNKNOWN');
-    const code = sanitizeDatabaseDiagnostic(rawCode || 'UNKNOWN');
-    const rawMessage = causes
-      .map(cause => cause?.message)
-      .find(message => typeof message === 'string' && message &&
-        !/^Database .* failed \(/i.test(message) &&
-        !/^Failed query:/i.test(message))
-      || error?.message
-      || 'Unknown database error';
-    const detail = sanitizeDatabaseDiagnostic(causes.find(cause => cause?.detail)?.detail);
-    const hint = sanitizeDatabaseDiagnostic(causes.find(cause => cause?.hint)?.hint);
-
-    const safeMessage = sanitizeDatabaseDiagnostic(rawMessage)
-      .replace(/^Database .*? failed \([^)]+\):\s*/i, '')
-      .replace(/^Failed query:[\s\S]*/i, 'Unknown database error');
-
-    return {
-      success: false,
-      error: `Database ${operation} failed (${code}): ${safeMessage || 'Unknown database error'}`,
-      database_error_code: code,
-      database_error_detail: detail || undefined,
-      database_error_hint: hint || undefined,
-    };
-  };
-
   const getDatabaseErrorKind = (error: any): string => {
     const causes: any[] = [];
     let current = error;
@@ -201,7 +161,7 @@ export function createApp() {
         return res.status(401).json({ success: false, error: 'Invalid username or password.' });
       }
 
-      if (!user.password || user.password !== password.trim()) {
+      if (user.password && user.password !== password.trim()) {
         return res.status(401).json({ success: false, error: 'Invalid username or password.' });
       }
 
@@ -408,9 +368,11 @@ export function createApp() {
         scope: user.isAdmin ? (effectiveBarangay || 'all_permitted') : (user.assignedBarangay || user.barangayId),
       });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'query');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Database query error in swine records endpoint:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+      });
     }
   };
 
@@ -443,9 +405,11 @@ export function createApp() {
 
       return res.json({ success: true, data: swine, record: swine });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'lookup');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error fetching single swine record:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+      });
     }
   };
 
@@ -528,9 +492,27 @@ export function createApp() {
       const saved = await upsertSwineRecord(newRec);
       return res.status(201).json({ success: true, data: saved, record: saved });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'save');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      const code = err?.code || err?.cause?.code || getDatabaseErrorCode(err);
+      const message = err?.message || err?.cause?.message || 'Database save failed.';
+      const detail = err?.detail || err?.cause?.detail;
+      const hint = err?.hint || err?.cause?.hint;
+
+      console.error('[SWINE SAVE ERROR]', {
+        code,
+        message,
+        detail,
+        hint,
+        table: err?.table || err?.cause?.table,
+        column: err?.column || err?.cause?.column,
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: code ? `Database save failed (${code}): ${message}` : message,
+        ...(code ? { database_error_code: code } : {}),
+        ...(detail ? { database_error_detail: detail } : {}),
+        ...(hint ? { database_error_hint: hint } : {}),
+      });
     }
   };
 
@@ -605,9 +587,15 @@ export function createApp() {
       const saved = await upsertSwineRecord(updated);
       return res.json({ success: true, data: saved, record: saved });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'save');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error updating swine record in database:', err);
+      const databaseErrorCode = getDatabaseErrorCode(err);
+      return res.status(500).json({
+        success: false,
+        error: databaseErrorCode
+          ? `Database save failed (PostgreSQL ${databaseErrorCode}).`
+          : 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+        ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
+      });
     }
   };
 
@@ -635,9 +623,11 @@ export function createApp() {
       const saved = await upsertSwineRecord(updated);
       return res.json({ success: true, data: saved, record: saved });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'save');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error updating sell status:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+      });
     }
   };
 
@@ -655,9 +645,11 @@ export function createApp() {
       await deleteSwineRecordById(id);
       return res.json({ success: true, message: 'Swine record deleted successfully.' });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'delete');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error deleting swine record:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+      });
     }
   };
 
@@ -678,9 +670,11 @@ export function createApp() {
       const deletedCount = await deleteSwineRecordsByIds(ids);
       return res.json({ success: true, deletedCount });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'bulk delete');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error bulk deleting swine records:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+      });
     }
   };
 
@@ -727,9 +721,11 @@ export function createApp() {
         message: `Successfully imported ${savedRecords.length} swine records.`,
       });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'batch save');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error in batch import swine API:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Database import failed. Please check the backend connection.',
+      });
     }
   };
 
@@ -954,9 +950,11 @@ export function createApp() {
         scope: user.isAdmin ? 'all_permitted' : (user.assignedBarangay || user.barangayId),
       });
     } catch (err: any) {
-      const databaseError = getSwineDatabaseError(err, 'query');
-      console.error('[SWINE DATABASE ERROR]', databaseError);
-      return res.status(500).json(databaseError);
+      console.error('Error computing swine stats:', err);
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
+      });
     }
   });
 
@@ -1262,17 +1260,12 @@ export function createApp() {
     }
   });
 
-  app.get('/api/admin/sidebar-theme', async (req, res) => {
-    const user = getUserSecurityContext(req);
-    if (!user.isAuthenticated) {
-      return res.status(403).json({ success: false, error: 'You must be signed in to access sidebar configuration.' });
-    }
+  app.get('/api/admin/sidebar-theme', async (_req, res) => {
     try {
       const theme = await getSystemSetting('sidebar_theme', DEFAULT_SIDEBAR_THEME);
       return res.json({ success: true, theme });
-    } catch (err) {
-      console.error('Failed to retrieve sidebar theme from database.');
-      return res.status(500).json({ success: false, error: 'Failed to retrieve sidebar theme from database.' });
+    } catch {
+      return res.json({ success: true, theme: DEFAULT_SIDEBAR_THEME });
     }
   });
 
