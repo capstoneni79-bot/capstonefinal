@@ -15,6 +15,11 @@ export async function getSystemSetting<T = any>(key: string, defaultValue?: T): 
   }
 }
 
+export async function getStoredSystemSetting<T = any>(key: string): Promise<T | null> {
+  const rows = await db.select().from(systemSettings).where(eq(systemSettings.key, key)).limit(1);
+  return rows.length > 0 ? rows[0].value as T | null : null;
+}
+
 export async function setSystemSetting<T = any>(key: string, value: T): Promise<T> {
   try {
     await db
