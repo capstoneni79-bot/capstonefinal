@@ -90,7 +90,7 @@ export const swineApi = {
 
     if (!res.ok) {
       const errJson = await res.json().catch(() => null);
-      const message = errJson?.error || 'Unable to connect to the Swine Registry database. Please check the backend connection.';
+      const message = errJson?.error || 'Failed to retrieve swine records.';
       throw new Error(message);
     }
 

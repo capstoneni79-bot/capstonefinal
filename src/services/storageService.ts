@@ -316,11 +316,9 @@ export const storageService = {
     } catch (error) {
       // IMPORTANT: Do not silently fall back to localStorage while online.
       // Supabase/Vercel must remain the authoritative source of truth.
-      console.error('Cloud database fetch failed:', error);
-
-      throw new Error(
-        'Unable to connect to the central Swine Registry database. Please check the Vercel/Supabase connection.'
-      );
+      console.error('Cloud database fetch failed.');
+      if (error instanceof Error) throw error;
+      throw new Error('Cloud database fetch failed.');
     }
   },
 

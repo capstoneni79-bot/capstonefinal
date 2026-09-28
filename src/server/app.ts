@@ -38,6 +38,40 @@ export function createApp() {
       : undefined;
   };
 
+  const sanitizeDatabaseDiagnostic = (value: unknown): string => String(value ?? '')
+    .replace(/(postgres(?:ql)?:\/\/)[^\s/@]+@/gi, '$1[REDACTED]@')
+    .replace(/\b(password|service[_ -]?key|api[_ -]?key|jwt|authorization|cookie)\s*[:=]\s*([^\s,;]+)/gi, '$1=[REDACTED]')
+    .replace(/\bBearer\s+[^\s,;]+/gi, 'Bearer [REDACTED]');
+
+  const getSwineDatabaseError = (error: any, operation: string) => {
+    const causes: any[] = [];
+    let current = error;
+    while (current && causes.length < 5) {
+      causes.push(current);
+      current = current.cause;
+    }
+
+    const rawCode = causes
+      .map(cause => cause?.code)
+      .find(code => typeof code === 'string' && code && code !== 'UNKNOWN');
+    const code = sanitizeDatabaseDiagnostic(rawCode || 'UNKNOWN');
+    const rawMessage = causes
+      .map(cause => cause?.message)
+      .find(message => typeof message === 'string' && message && !/^Database .* failed \(/i.test(message))
+      || error?.message
+      || 'Unknown database error';
+    const detail = sanitizeDatabaseDiagnostic(causes.find(cause => cause?.detail)?.detail);
+    const hint = sanitizeDatabaseDiagnostic(causes.find(cause => cause?.hint)?.hint);
+
+    return {
+      success: false,
+      error: `Database ${operation} failed (${code}): ${sanitizeDatabaseDiagnostic(rawMessage)}`,
+      database_error_code: code,
+      database_error_detail: detail || undefined,
+      database_error_hint: hint || undefined,
+    };
+  };
+
   const getDatabaseErrorKind = (error: any): string => {
     const causes: any[] = [];
     let current = error;
@@ -368,11 +402,9 @@ export function createApp() {
         scope: user.isAdmin ? (effectiveBarangay || 'all_permitted') : (user.assignedBarangay || user.barangayId),
       });
     } catch (err: any) {
-      console.error('Database query error in swine records endpoint:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'query');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -405,11 +437,9 @@ export function createApp() {
 
       return res.json({ success: true, data: swine, record: swine });
     } catch (err: any) {
-      console.error('Error fetching single swine record:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'lookup');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -433,7 +463,7 @@ export function createApp() {
       return res.status(400).json({
         success: false,
         field: 'farmerContact',
-        error: 'Contact number must contain exactly 10 digits after +63 and start with 9 (e.g. +63 912 345 6789).',
+        error: 'Contact number must contain exactly 10 digits after +63. Example: +63 912 591 8781.',
       });
     }
     if (farmerContact) record.farmerContact = normalizePhilippinePhoneNumber(farmerContact);
@@ -492,15 +522,9 @@ export function createApp() {
       const saved = await upsertSwineRecord(newRec);
       return res.status(201).json({ success: true, data: saved, record: saved });
     } catch (err: any) {
-      console.error('Error inserting swine record to database:', err);
-      const databaseErrorCode = getDatabaseErrorCode(err);
-      return res.status(500).json({
-        success: false,
-        error: databaseErrorCode
-          ? `Database save failed (PostgreSQL ${databaseErrorCode}).`
-          : 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-        ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
-      });
+      const databaseError = getSwineDatabaseError(err, 'save');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -575,15 +599,9 @@ export function createApp() {
       const saved = await upsertSwineRecord(updated);
       return res.json({ success: true, data: saved, record: saved });
     } catch (err: any) {
-      console.error('Error updating swine record in database:', err);
-      const databaseErrorCode = getDatabaseErrorCode(err);
-      return res.status(500).json({
-        success: false,
-        error: databaseErrorCode
-          ? `Database save failed (PostgreSQL ${databaseErrorCode}).`
-          : 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-        ...(databaseErrorCode ? { database_error_code: databaseErrorCode } : {}),
-      });
+      const databaseError = getSwineDatabaseError(err, 'save');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -611,11 +629,9 @@ export function createApp() {
       const saved = await upsertSwineRecord(updated);
       return res.json({ success: true, data: saved, record: saved });
     } catch (err: any) {
-      console.error('Error updating sell status:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'save');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -633,11 +649,9 @@ export function createApp() {
       await deleteSwineRecordById(id);
       return res.json({ success: true, message: 'Swine record deleted successfully.' });
     } catch (err: any) {
-      console.error('Error deleting swine record:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'delete');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -658,11 +672,9 @@ export function createApp() {
       const deletedCount = await deleteSwineRecordsByIds(ids);
       return res.json({ success: true, deletedCount });
     } catch (err: any) {
-      console.error('Error bulk deleting swine records:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'bulk delete');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -709,11 +721,9 @@ export function createApp() {
         message: `Successfully imported ${savedRecords.length} swine records.`,
       });
     } catch (err: any) {
-      console.error('Error in batch import swine API:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Database import failed. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'batch save');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   };
 
@@ -938,11 +948,9 @@ export function createApp() {
         scope: user.isAdmin ? 'all_permitted' : (user.assignedBarangay || user.barangayId),
       });
     } catch (err: any) {
-      console.error('Error computing swine stats:', err);
-      return res.status(500).json({
-        success: false,
-        error: 'Unable to connect to the Swine Registry database. Please check the backend connection.',
-      });
+      const databaseError = getSwineDatabaseError(err, 'query');
+      console.error('[SWINE DATABASE ERROR]', databaseError);
+      return res.status(500).json(databaseError);
     }
   });
 
