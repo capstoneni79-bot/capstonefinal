@@ -162,7 +162,7 @@ export const ApiConfiguration: React.FC = () => {
                 type="text"
                 value={apiBaseUrl}
                 onChange={e => setApiBaseUrl(e.target.value)}
-                placeholder="http://localhost:3000"
+                placeholder="https://your-api.example"
                 className="w-full px-3 py-2 rounded-xl border border-stone-300 font-mono text-xs focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 outline-hidden"
               />
             </div>

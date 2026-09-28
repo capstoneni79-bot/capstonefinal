@@ -1,5 +1,58 @@
 @import "tailwindcss";
 
+.sidebar-theme-root {
+  background-color: var(--sidebar-background);
+  color: var(--sidebar-text);
+}
+
+.sidebar-theme-item {
+  color: var(--sidebar-text);
+}
+
+.sidebar-theme-root .sidebar-theme-item:hover:not([data-active="true"]),
+.sidebar-theme-root button[style*="background-color: transparent"]:hover {
+  background-color: var(--sidebar-hover) !important;
+}
+
+.sidebar-theme-root .sidebar-theme-item[data-active="true"] {
+  background-color: var(--sidebar-active);
+  color: var(--sidebar-active-text);
+}
+
+.sidebar-theme-root .sidebar-theme-item[data-active="true"] svg {
+  color: var(--sidebar-active-text);
+}
+
+.sidebar-theme-root .sidebar-theme-item:not([data-active="true"]) svg {
+  color: var(--sidebar-icon);
+}
+
+.sidebar-theme-root {
+  background-color: var(--sidebar-background);
+  color: var(--sidebar-text);
+}
+
+.sidebar-theme-item {
+  color: var(--sidebar-text);
+}
+
+.sidebar-theme-root .sidebar-theme-item:hover:not([data-active="true"]) {
+  background-color: var(--sidebar-hover) !important;
+}
+
+.sidebar-theme-root .sidebar-theme-item[data-active="true"] {
+  background-color: var(--sidebar-active);
+  color: var(--sidebar-active-text);
+}
+
+.sidebar-theme-root .sidebar-theme-item[data-active="true"] svg {
+  color: var(--sidebar-active-text);
+}
+
+.sidebar-theme-root .sidebar-theme-item:not([data-active="true"]) svg {
+  color: var(--sidebar-icon);
+}
+
 /* Certificate Specific Typography & Custom Fonts */
 .font-gothic-cert {
   font-family: 'UnifrakturMaguntia', 'Cinzel Decorative', 'Old English Text MT', Georgia, serif;

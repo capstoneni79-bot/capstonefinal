@@ -1262,12 +1262,17 @@ export function createApp() {
     }
   });
 
-  app.get('/api/admin/sidebar-theme', async (_req, res) => {
+  app.get('/api/admin/sidebar-theme', async (req, res) => {
+    const user = getUserSecurityContext(req);
+    if (!user.isAuthenticated) {
+      return res.status(403).json({ success: false, error: 'You must be signed in to access sidebar configuration.' });
+    }
     try {
       const theme = await getSystemSetting('sidebar_theme', DEFAULT_SIDEBAR_THEME);
       return res.json({ success: true, theme });
-    } catch {
-      return res.json({ success: true, theme: DEFAULT_SIDEBAR_THEME });
+    } catch (err) {
+      console.error('Failed to retrieve sidebar theme from database.');
+      return res.status(500).json({ success: false, error: 'Failed to retrieve sidebar theme from database.' });
     }
   });
 

@@ -41,7 +41,9 @@ import { SidebarTheme, UserAccount, UserRole } from '../../types';
 import { useOfflineStatus } from '../../hooks/useOfflineStatus';
 import { SealMunicipality, useOfficialLogos } from './OfficialSeals';
 import { storageService } from '../../services/storageService';
+import { settingsApi } from '../../services/api';
 import { useLanguage } from '../../context/LanguageContext';
+import { getSidebarThemeStyles } from '../../utils/sidebarThemeStyles';
 
 interface SidebarProps {
   currentUser: UserAccount | null;
@@ -86,13 +88,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const handleThemeChange = (e: Event) => {
       const customEvent = e as CustomEvent<SidebarTheme>;
       if (customEvent.detail) {
-        setTheme(customEvent.detail);
+        setTheme(current => ({ ...current, ...customEvent.detail }));
       } else {
         setTheme(storageService.getSidebarTheme());
       }
     };
 
     window.addEventListener('da_sidebar_theme_change', handleThemeChange);
+    settingsApi.getSidebarTheme()
+      .then(savedTheme => storageService.saveSidebarTheme(savedTheme))
+      .catch(() => {});
     return () => {
       window.removeEventListener('da_sidebar_theme_change', handleThemeChange);
     };
@@ -108,15 +113,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <div
-      className="w-full h-full text-white flex flex-col justify-between overflow-y-auto overflow-x-hidden select-none custom-sidebar-scroll transition-colors duration-200"
-      style={{
-        backgroundColor: theme.backgroundColor || '#070e20',
-      }}
+      className="sidebar-theme-root w-full h-full flex flex-col justify-between overflow-y-auto overflow-x-hidden select-none custom-sidebar-scroll transition-colors duration-200"
+      style={getSidebarThemeStyles(theme)}
     >
       {/* Top Container */}
       <div className="p-4 pt-4 space-y-3.5 flex-1">
         {/* Header: Official Logo & Municipal Registry Brand */}
-        <div className="flex items-center justify-between gap-3 pb-1 border-b border-white/10">
+        <div className="flex items-center justify-between gap-3 pb-1 border-b" style={{ borderColor: 'var(--sidebar-divider)' }}>
           <div className="flex items-center gap-3 min-w-0">
             <div className="relative group shrink-0">
               {singleLogoUrl ? (
@@ -131,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       : 'rounded-full'
                   }`}
                   style={{
-                    borderColor: theme.sectionDividerColor || '#1e3a8a',
+                    borderColor: 'var(--sidebar-divider)',
                     backgroundColor: 'rgba(255, 255, 255, 0.08)',
                   }}
                 />
@@ -190,16 +193,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           }}
           className="border rounded-2xl p-3 flex items-center gap-3 shadow-inner transition cursor-pointer hover:brightness-110 active:scale-[0.99]"
           style={{
-            backgroundColor: theme.hoverColor || '#111a36',
-            borderColor: theme.sectionDividerColor || '#1e3a8a',
+            backgroundColor: 'var(--sidebar-hover)',
+            borderColor: 'var(--sidebar-divider)',
           }}
           title={currentUser ? currentUser.name : 'Click to Login'}
         >
           <div
             className="w-9 h-9 rounded-xl font-bold flex items-center justify-center text-sm shrink-0 shadow-md"
             style={{
-              backgroundColor: isAgent ? '#d97706' : theme.activeMenuColor || '#2563eb',
-              color: theme.activeTextColor || '#ffffff',
+              backgroundColor: isAgent ? 'var(--sidebar-badge)' : 'var(--sidebar-active)',
+              color: 'var(--sidebar-active-text)',
             }}
           >
             {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'E'}
@@ -238,18 +241,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={() => onSelectTab('ready_to_sell')}
-              className={`w-full text-left px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'ready_to_sell' || activeTab === 'dashboard'
-                  ? 'bg-amber-600 text-white shadow-md'
-                  : 'text-slate-200 hover:bg-white/10'
-              }`}
+              className="sidebar-theme-item w-full text-left px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition cursor-pointer"
+              data-active={activeTab === 'ready_to_sell' || activeTab === 'dashboard'}
+              style={{
+                backgroundColor: activeTab === 'ready_to_sell' || activeTab === 'dashboard' ? 'var(--sidebar-active)' : undefined,
+                color: activeTab === 'ready_to_sell' || activeTab === 'dashboard' ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+              }}
             >
               <div className="flex items-center gap-3 truncate">
-                <Truck className="w-4 h-4 shrink-0 text-amber-300" />
+                <Truck className="w-4 h-4 shrink-0" style={{ color: 'var(--sidebar-icon)' }} />
                 <span className="truncate">{t('nav_ready_to_sell')}</span>
               </div>
               {readyTakeoffCount > 0 && (
-                <span className="ml-auto px-2 py-0.5 rounded-full bg-amber-500 text-amber-950 font-black text-[10px]">
+                <span className="ml-auto px-2 py-0.5 rounded-full font-black text-[10px]" style={{ backgroundColor: 'var(--sidebar-badge)', color: 'var(--sidebar-active-text)' }}>
                   {readyTakeoffCount}
                 </span>
               )}
@@ -259,14 +263,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={() => onSelectTab('messages')}
-              className={`w-full text-left px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition cursor-pointer ${
-                activeTab === 'messages'
-                  ? 'bg-[#2563eb] text-white shadow-md'
-                  : 'text-slate-200 hover:bg-white/10'
-              }`}
+              className="sidebar-theme-item w-full text-left px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center justify-between transition cursor-pointer"
+              data-active={activeTab === 'messages'}
+              style={{
+                backgroundColor: activeTab === 'messages' ? 'var(--sidebar-active)' : undefined,
+                color: activeTab === 'messages' ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+              }}
             >
               <div className="flex items-center gap-3 truncate">
-                <MessageSquare className="w-4 h-4 shrink-0 text-blue-300" />
+                <MessageSquare className="w-4 h-4 shrink-0" style={{ color: 'var(--sidebar-icon)' }} />
                 <span className="truncate">{t('nav_messages')}</span>
               </div>
               {unreadCount > 0 && (
@@ -280,13 +285,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={() => onSelectTab('account')}
-              className={`w-full text-left px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-3 transition cursor-pointer ${
-                activeTab === 'account'
-                  ? 'bg-[#2563eb] text-white shadow-md'
-                  : 'text-slate-200 hover:bg-white/10'
-              }`}
+              className="sidebar-theme-item w-full text-left px-3.5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-3 transition cursor-pointer"
+              data-active={activeTab === 'account'}
+              style={{
+                backgroundColor: activeTab === 'account' ? 'var(--sidebar-active)' : undefined,
+                color: activeTab === 'account' ? 'var(--sidebar-active-text)' : 'var(--sidebar-text)',
+              }}
             >
-              <User className="w-4 h-4 shrink-0 text-emerald-300" />
+              <User className="w-4 h-4 shrink-0" style={{ color: 'var(--sidebar-icon)' }} />
               <span className="truncate">{t('nav_my_account')}</span>
             </button>
           </div>
@@ -299,8 +305,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => onSelectTab('add_swine')}
               className="w-full py-2.5 px-3.5 rounded-xl border text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs hover:brightness-110 active:scale-[0.99]"
               style={{
-                backgroundColor: theme.hoverColor || '#0d1733',
-                borderColor: theme.sectionDividerColor || '#1e3a8a',
+                backgroundColor: 'var(--sidebar-hover)',
+                borderColor: 'var(--sidebar-divider)',
               }}
             >
               <Plus className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -948,8 +954,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div
         className="p-4 pt-3 pb-4 border-t space-y-3 shrink-0"
         style={{
-          backgroundColor: theme.backgroundColor || '#070e20',
-          borderColor: theme.sectionDividerColor || '#1e3a8a',
+          backgroundColor: 'var(--sidebar-background)',
+          borderColor: 'var(--sidebar-divider)',
         }}
       >
         {/* 3-Way Language Selector */}

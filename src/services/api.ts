@@ -290,7 +290,10 @@ export const settingsApi = {
       headers: getAuthHeaders(),
     });
     const data = await res.json().catch(() => null);
-    return data?.theme;
+    if (!res.ok || !data?.success || !data.theme) {
+      throw new Error(data?.error || 'Failed to load sidebar configuration.');
+    }
+    return data.theme;
   },
 
   async saveSidebarTheme(theme: SidebarTheme): Promise<SidebarTheme> {
@@ -300,7 +303,10 @@ export const settingsApi = {
       body: JSON.stringify(theme),
     });
     const data = await res.json().catch(() => null);
-    return data?.theme;
+    if (!res.ok || !data?.success || !data.theme) {
+      throw new Error(data?.error || 'Failed to save sidebar configuration.');
+    }
+    return data.theme;
   },
 
   async getRegistryFormSchema(): Promise<RegistryFormSchema> {

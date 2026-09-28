@@ -436,20 +436,6 @@ class MasterConfigService {
           detail: this.memoryPublished,
         })
       );
-      // Also sync sidebar theme event for backwards compatibility
-      if (this.memoryPublished.roles.admin?.sidebar) {
-        window.dispatchEvent(
-          new CustomEvent('da_sidebar_theme_change', {
-            detail: {
-              backgroundColor: this.memoryPublished.roles.admin.sidebar.backgroundColor,
-              activeMenuColor: this.memoryPublished.roles.admin.colors.sidebarActiveColor,
-              activeTextColor: '#ffffff',
-              menuTextColor: this.memoryPublished.roles.admin.sidebar.textColor,
-              hoverColor: this.memoryPublished.roles.admin.sidebar.hoverColor,
-            },
-          })
-        );
-      }
     }
   }
 

@@ -27,6 +27,8 @@ import { storageService } from '../../services/storageService';
 import { DEFAULT_SIDEBAR_THEME, SIDEBAR_THEME_PRESETS } from '../../data/initialFormSchema';
 import { SealDA, SealMunicipality, SealTaskForce, SealSLSU } from '../common/OfficialSeals';
 import { compressImageFile } from '../../utils/imageCompressor';
+import { settingsApi } from '../../services/api';
+import { getSidebarThemeStyles } from '../../utils/sidebarThemeStyles';
 
 export interface EmblemPresetItem {
   id: string;
@@ -83,6 +85,7 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
   });
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [activePreviewTab, setActivePreviewTab] = useState<'dashboard' | 'ready_to_sell' | 'messages'>('dashboard');
 
   // Emblem Presets state
@@ -116,9 +119,19 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
   };
 
   useEffect(() => {
-    const current = storageService.getSidebarTheme();
-    setInitialTheme(current);
-    setTheme(current);
+    let mounted = true;
+    settingsApi.getSidebarTheme().then(current => {
+      if (!mounted) return;
+      storageService.saveSidebarTheme(current);
+      setInitialTheme(current);
+      setTheme(current);
+    }).catch(() => {
+      const current = storageService.getSidebarTheme();
+      if (!mounted) return;
+      setInitialTheme(current);
+      setTheme(current);
+    });
+    return () => { mounted = false; };
   }, []);
 
   const handleColorChange = (key: keyof SidebarTheme, value: string) => {
@@ -146,11 +159,20 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
     showToast('Reset to default Government Navy theme colors');
   };
 
-  const handleSave = () => {
-    storageService.saveSidebarTheme(theme);
-    setInitialTheme(theme);
-    showToast('✓ Sidebar configuration (colors & logo) saved and applied successfully');
-    if (onSaved) onSaved();
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const savedTheme = await settingsApi.saveSidebarTheme(theme);
+      storageService.saveSidebarTheme(savedTheme);
+      setInitialTheme(savedTheme);
+      setTheme(savedTheme);
+      showToast('Sidebar configuration saved and applied successfully');
+      if (onSaved) onSaved();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not save sidebar configuration.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -281,10 +303,11 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
           <button
             type="button"
             onClick={handleSave}
+            disabled={isSaving}
             className="px-5 py-2.5 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs flex items-center gap-2 transition shadow-sm cursor-pointer"
           >
             <Save className="w-4 h-4" />
-            <span>Save Changes</span>
+            <span>{isSaving ? 'Saving…' : 'Save Changes'}</span>
           </button>
         </div>
       </div>
@@ -330,8 +353,8 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                       : 'rounded-full'
                   }`}
                   style={{
-                    backgroundColor: theme.backgroundColor || '#070e20',
-                    borderColor: theme.sectionDividerColor || '#1e3a8a',
+                    backgroundColor: 'var(--sidebar-background)',
+                    borderColor: 'var(--sidebar-divider)',
                   }}
                 >
                   {theme.logoUrl ? (
@@ -907,14 +930,12 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
 
             {/* Sidebar Mockup Container */}
             <div
-              className="w-full rounded-2xl p-4 shadow-xl border overflow-hidden transition-colors duration-200 space-y-4 select-none"
-              style={{
-                backgroundColor: theme.backgroundColor,
-                borderColor: theme.sectionDividerColor,
-              }}
+              className="sidebar-theme-root w-full rounded-2xl p-4 shadow-xl border overflow-hidden transition-colors duration-200 space-y-4 select-none"
+              style={{ ...getSidebarThemeStyles(theme), borderColor: 'var(--sidebar-divider)' }}
+              data-sidebar-theme-preview
             >
               {/* Header inside Mockup (Single Configured Logo) */}
-              <div className="flex items-center gap-2.5 pb-3 border-b" style={{ borderColor: theme.sectionDividerColor }}>
+              <div className="flex items-center gap-2.5 pb-3 border-b" style={{ borderColor: 'var(--sidebar-divider)' }}>
                 <div className="shrink-0 flex items-center justify-center">
                   {theme.logoUrl ? (
                     <img
@@ -934,7 +955,7 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                           : 'rounded-full'
                       }`}
                       style={{
-                        borderColor: theme.sectionDividerColor,
+                        borderColor: 'var(--sidebar-divider)',
                         backgroundColor: 'rgba(255, 255, 255, 0.08)',
                       }}
                     />
@@ -945,10 +966,10 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="font-bold text-xs leading-tight truncate" style={{ color: theme.activeTextColor }}>
+                  <div className="font-bold text-xs leading-tight truncate" style={{ color: 'var(--sidebar-active-text)' }}>
                     DA Hinunangan Registry
                   </div>
-                  <div className="text-[10px] opacity-75 truncate" style={{ color: theme.menuTextColor }}>
+                  <div className="text-[10px] opacity-75 truncate" style={{ color: 'var(--sidebar-text)' }}>
                     Municipal Agriculture Office
                   </div>
                 </div>
@@ -958,21 +979,21 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
               <div
                 className="p-2.5 rounded-xl flex items-center gap-2.5 border"
                 style={{
-                  backgroundColor: theme.hoverColor || 'rgba(255,255,255,0.05)',
-                  borderColor: theme.sectionDividerColor,
+                  backgroundColor: 'var(--sidebar-hover)',
+                  borderColor: 'var(--sidebar-divider)',
                 }}
               >
                 <div
                   className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-                  style={{ backgroundColor: theme.activeMenuColor, color: theme.activeTextColor }}
+                  style={{ backgroundColor: 'var(--sidebar-active)', color: 'var(--sidebar-active-text)' }}
                 >
                   A
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-bold truncate" style={{ color: theme.activeTextColor }}>
+                  <div className="text-xs font-bold truncate" style={{ color: 'var(--sidebar-active-text)' }}>
                     Admin Valdez
                   </div>
-                  <div className="text-[9px] opacity-70 truncate" style={{ color: theme.menuTextColor }}>
+                  <div className="text-[9px] opacity-70 truncate" style={{ color: 'var(--sidebar-text)' }}>
                     MAO Head / Executive
                   </div>
                 </div>
@@ -984,18 +1005,15 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                 <button
                   type="button"
                   onClick={() => setActivePreviewTab('dashboard')}
-                  className="w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition cursor-pointer"
-                  style={{
-                    backgroundColor: activePreviewTab === 'dashboard' ? theme.activeMenuColor : 'transparent',
-                    color: activePreviewTab === 'dashboard' ? theme.activeTextColor : theme.menuTextColor,
-                  }}
+                  className="sidebar-theme-item w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition cursor-pointer"
+                  data-active={activePreviewTab === 'dashboard'}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <LayoutGrid className="w-4 h-4 shrink-0" style={{ color: activePreviewTab === 'dashboard' ? theme.activeTextColor : theme.iconColor }} />
+                    <LayoutGrid className="w-4 h-4 shrink-0" />
                     <span>Dashboard</span>
                   </div>
                   {activePreviewTab === 'dashboard' && (
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: theme.activeTextColor }} />
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--sidebar-active-text)' }} />
                   )}
                 </button>
 
@@ -1003,19 +1021,16 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                 <button
                   type="button"
                   onClick={() => setActivePreviewTab('ready_to_sell')}
-                  className="w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition cursor-pointer"
-                  style={{
-                    backgroundColor: activePreviewTab === 'ready_to_sell' ? theme.activeMenuColor : 'transparent',
-                    color: activePreviewTab === 'ready_to_sell' ? theme.activeTextColor : theme.menuTextColor,
-                  }}
+                  className="sidebar-theme-item w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition cursor-pointer"
+                  data-active={activePreviewTab === 'ready_to_sell'}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <Truck className="w-4 h-4 shrink-0" style={{ color: activePreviewTab === 'ready_to_sell' ? theme.activeTextColor : theme.iconColor }} />
+                    <Truck className="w-4 h-4 shrink-0" />
                     <span>Ready for Take-Off</span>
                   </div>
                   <span
                     className="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
-                    style={{ backgroundColor: theme.badgeColor, color: theme.activeTextColor }}
+                    style={{ backgroundColor: 'var(--sidebar-badge)', color: 'var(--sidebar-active-text)' }}
                   >
                     14
                   </span>
@@ -1025,18 +1040,16 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                 <button
                   type="button"
                   onClick={() => setActivePreviewTab('messages')}
-                  className="w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition cursor-pointer"
-                  style={{
-                    backgroundColor: activePreviewTab === 'messages' ? theme.activeMenuColor : 'transparent',
-                    color: activePreviewTab === 'messages' ? theme.activeTextColor : theme.menuTextColor,
-                  }}
+                  className="sidebar-theme-item w-full text-left px-3 py-2 rounded-xl font-bold flex items-center justify-between transition cursor-pointer"
+                  data-active={activePreviewTab === 'messages'}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    <MessageSquare className="w-4 h-4 shrink-0" style={{ color: activePreviewTab === 'messages' ? theme.activeTextColor : theme.iconColor }} />
+                    <MessageSquare className="w-4 h-4 shrink-0" />
                     <span>Messages</span>
                   </div>
                   <span
-                    className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white"
+                    className="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                    style={{ backgroundColor: 'var(--sidebar-badge)', color: 'var(--sidebar-active-text)' }}
                   >
                     3
                   </span>
@@ -1045,17 +1058,17 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
                 {/* Divider */}
                 <div
                   className="my-2 border-t pt-2"
-                  style={{ borderColor: theme.sectionDividerColor }}
+                  style={{ borderColor: 'var(--sidebar-divider)' }}
                 >
-                  <div className="text-[10px] font-bold uppercase tracking-wider mb-1 px-1 opacity-70" style={{ color: theme.menuTextColor }}>
+                  <div className="text-[10px] font-bold uppercase tracking-wider mb-1 px-1 opacity-70" style={{ color: 'var(--sidebar-text)' }}>
                     Settings & Appearance
                   </div>
 
                   <div
                     className="w-full text-left px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-2.5 opacity-80"
-                    style={{ color: theme.menuTextColor }}
+                    style={{ color: 'var(--sidebar-text)' }}
                   >
-                    <Palette className="w-3.5 h-3.5" style={{ color: theme.iconColor }} />
+                    <Palette className="w-3.5 h-3.5" style={{ color: 'var(--sidebar-icon)' }} />
                     <span>Sidebar Color Configuration</span>
                   </div>
                 </div>
@@ -1064,10 +1077,10 @@ export const SidebarColorConfig: React.FC<SidebarColorConfigProps> = ({
               {/* Footer inside mockup */}
               <div
                 className="pt-2 border-t flex items-center justify-between text-[10px] opacity-75"
-                style={{ borderColor: theme.sectionDividerColor, color: theme.menuTextColor }}
+                style={{ borderColor: 'var(--sidebar-divider)', color: 'var(--sidebar-text)' }}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: theme.badgeColor }} />
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--sidebar-badge)' }} />
                   <span>Online Synced</span>
                 </div>
                 <span>v1.0-MAO</span>

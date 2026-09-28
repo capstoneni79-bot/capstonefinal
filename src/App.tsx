@@ -547,7 +547,7 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden relative">
         {/* Desktop Sidebar (Toggleable via left hamburger menu button) */}
         {currentRole !== 'landing' && isSidebarOpen && (
-          <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-slate-800/80 bg-[#070e20] z-20 h-full overflow-hidden transition-all duration-200">
+          <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 border-r border-transparent bg-transparent z-20 h-full overflow-hidden transition-all duration-200">
             <Sidebar
               currentUser={currentUser}
               currentRole={currentRole}
@@ -572,7 +572,7 @@ export default function App() {
               onClick={() => setIsSidebarOpen(false)}
               aria-label="Close navigation menu"
             />
-            <div className="relative w-72 sm:w-80 max-w-[85vw] h-full bg-[#070e20] shadow-2xl z-10 flex flex-col overflow-hidden animate-in slide-in-from-left duration-200">
+            <div className="relative w-72 sm:w-80 max-w-[85vw] h-full bg-transparent shadow-2xl z-10 flex flex-col overflow-hidden animate-in slide-in-from-left duration-200">
               <Sidebar
                 currentUser={currentUser}
                 currentRole={currentRole}
