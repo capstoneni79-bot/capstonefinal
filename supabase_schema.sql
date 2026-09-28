@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- 3. Swine Records Table (Registry & Biosecurity Tracking)
 CREATE TABLE IF NOT EXISTS swine_records (
-  id TEXT PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   computed_pig_id TEXT NOT NULL,
   pig_id_tag TEXT,
   ear_tag_no TEXT,

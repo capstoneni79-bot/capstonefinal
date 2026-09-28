@@ -57,15 +57,21 @@ export function createApp() {
     const code = sanitizeDatabaseDiagnostic(rawCode || 'UNKNOWN');
     const rawMessage = causes
       .map(cause => cause?.message)
-      .find(message => typeof message === 'string' && message && !/^Database .* failed \(/i.test(message))
+      .find(message => typeof message === 'string' && message &&
+        !/^Database .* failed \(/i.test(message) &&
+        !/^Failed query:/i.test(message))
       || error?.message
       || 'Unknown database error';
     const detail = sanitizeDatabaseDiagnostic(causes.find(cause => cause?.detail)?.detail);
     const hint = sanitizeDatabaseDiagnostic(causes.find(cause => cause?.hint)?.hint);
 
+    const safeMessage = sanitizeDatabaseDiagnostic(rawMessage)
+      .replace(/^Database .*? failed \([^)]+\):\s*/i, '')
+      .replace(/^Failed query:[\s\S]*/i, 'Unknown database error');
+
     return {
       success: false,
-      error: `Database ${operation} failed (${code}): ${sanitizeDatabaseDiagnostic(rawMessage)}`,
+      error: `Database ${operation} failed (${code}): ${safeMessage || 'Unknown database error'}`,
       database_error_code: code,
       database_error_detail: detail || undefined,
       database_error_hint: hint || undefined,

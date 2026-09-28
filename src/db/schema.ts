@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { boolean, integer, jsonb, pgTable, serial, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -13,7 +13,7 @@ export const users = pgTable('users', {
 });
 
 export const swineRecords = pgTable('swine_records', {
-  id: text('id').primaryKey(),
+  id: uuid('id').primaryKey(),
   computedPigId: text('computed_pig_id').notNull(),
   pigIdTag: text('pig_id_tag'),
   earTagNo: text('ear_tag_no'),

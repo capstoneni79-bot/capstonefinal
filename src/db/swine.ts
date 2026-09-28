@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { db, persistLocalDatabase } from './index.ts';
 import { swineRecords } from './schema.ts';
 import { eq, inArray, and, ilike, or, desc, sql } from 'drizzle-orm';
@@ -107,49 +108,29 @@ function toJsonSafeValue(value: any, seen = new WeakSet<object>()): any {
  * Extract useful PostgreSQL information without exposing credentials.
  */
 function getDatabaseErrorInfo(error: any) {
-  const cause = error?.cause;
+  const causes: any[] = [];
+  const pending = [error];
+  while (pending.length > 0 && causes.length < 8) {
+    const current = pending.shift();
+    if (!current || causes.includes(current)) continue;
+    causes.push(current);
+    if (current.cause) pending.push(current.cause);
+    if (current.originalError) pending.push(current.originalError);
+  }
 
-  const rawCode =
-    error?.code ??
-    cause?.code ??
-    error?.originalError?.code ??
-    cause?.originalError?.code ??
-    'UNKNOWN';
-
-  const rawMessage =
-    error?.message ??
-    cause?.message ??
-    error?.originalError?.message ??
-    cause?.originalError?.message ??
-    'Unknown database error';
-
-  const rawDetail =
-    error?.detail ??
-    cause?.detail ??
-    error?.originalError?.detail ??
-    cause?.originalError?.detail ??
-    '';
-
-  const rawHint =
-    error?.hint ??
-    cause?.hint ??
-    error?.originalError?.hint ??
-    cause?.originalError?.hint ??
-    '';
-
-  const rawTable =
-    error?.table ??
-    cause?.table ??
-    error?.originalError?.table ??
-    cause?.originalError?.table ??
-    '';
-
-  const rawColumn =
-    error?.column ??
-    cause?.column ??
-    error?.originalError?.column ??
-    cause?.originalError?.column ??
-    '';
+  const firstDefined = (key: string) => causes
+    .map(cause => cause?.[key])
+    .find(value => value !== undefined && value !== null && value !== '');
+  const rawCode = firstDefined('code') || 'UNKNOWN';
+  const rawMessage = causes
+    .map(cause => cause?.message)
+    .find(message => typeof message === 'string' && message &&
+      !/^Database .* failed \(/i.test(message) &&
+      !/^Failed query:/i.test(message)) || 'Unknown database error';
+  const rawDetail = firstDefined('detail') || '';
+  const rawHint = firstDefined('hint') || '';
+  const rawTable = firstDefined('table') || '';
+  const rawColumn = firstDefined('column') || '';
 
   return {
     code: sanitizeDatabaseDiagnostic(rawCode) || 'UNKNOWN',
@@ -559,9 +540,10 @@ export function mapSwineToDb(s: any) {
       null
     );
 
-  const id = String(
-    record.id || `swine-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  );
+  const candidateId = String(record.id || '');
+  const id = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidateId)
+    ? candidateId
+    : randomUUID();
   const computedPigId = String(
     record.pigIdTag || record.earTagNo || record.computedPigId || id
   );
