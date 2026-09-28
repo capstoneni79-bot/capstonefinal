@@ -269,24 +269,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              {/* 1. Super Admin */}
-              <button
-                type="button"
-                onClick={() => handleQuickFill('superadmin', 'admin')}
-                className={`p-2 rounded-xl border text-left transition cursor-pointer ${
-                  usernameOrEmail === 'superadmin'
-                    ? 'border-purple-600 bg-purple-50 text-purple-950 font-bold shadow-2xs'
-                    : 'border-stone-200 hover:border-purple-300 bg-stone-50/60 text-stone-700'
-                }`}
-              >
-                <div className="flex items-center gap-1 text-[11px] font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5 text-purple-700 shrink-0" />
-                  <span>Super Admin</span>
-                </div>
-                <div className="text-[10px] text-stone-500 truncate mt-0.5">DA Regional</div>
-              </button>
-
-              {/* 2. Admin */}
+              {/* Admin */}
               <button
                 type="button"
                 onClick={() => handleQuickFill('admin', 'admin')}
@@ -303,7 +286,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="text-[10px] text-stone-500 truncate mt-0.5">MAO Vasquez</div>
               </button>
 
-              {/* 3. Focal Person */}
+              {/* Focal Person */}
               <button
                 type="button"
                 onClick={() => handleQuickFill('focal_poblacion', 'password123')}
@@ -320,7 +303,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 <div className="text-[10px] text-stone-500 truncate mt-0.5">Santos, M.</div>
               </button>
 
-              {/* 4. Agent */}
+              {/* Agent */}
               <button
                 type="button"
                 onClick={() => handleQuickFill('agent_hinunangan', 'password123')}
